@@ -2839,14 +2839,16 @@ elif page == "🤖 AI 생활지원사":
                     mun = row["지자체"]
                     color = MUN_COLORS.get(mun, "#607D8B")
                     alarm = row["알람요일"] or "미정"
-                    start_week = row["계약시작주차"] or "-"
+                    # "3월 8일~14일" → "3월 8일" (~ 앞부분만)
+                    raw_period = row["계약시작주차"] or "-"
+                    start_date = raw_period.split("~")[0].strip()
                     with info_cols[i]:
                         st.markdown(
                             f"""<div style="background:{color};border-radius:10px;
                                 padding:0.7rem 1rem;color:white;text-align:center">
                               <b style="font-size:0.95rem">{mun}</b><br>
                               <span style="font-size:0.8rem;opacity:0.9">
-                                📅 {start_week} &nbsp;|&nbsp; 🔔 {alarm}
+                                📅 {start_date} &nbsp;|&nbsp; 🔔 {alarm}
                               </span>
                             </div>""",
                             unsafe_allow_html=True,
