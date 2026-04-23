@@ -284,6 +284,55 @@ def get_weekly_users(sheets: dict) -> pd.DataFrame:
     return df
 
 
+def get_weekly_registered_by_municipality(sheets: dict) -> pd.DataFrame:
+    """이용자주간(gid=0) 시트에서 주차별 지자체별 가입완료 인원 추출
+
+    시트 구조: 주차 | 시작일 | 대상자 수 | 회원가입 완료 | 경기도청 | 경기도청가입률 | 용인시청 | ...
+    지자체명 컬럼(숫자값)만 추출 → long-format 반환
+
+    Returns: DataFrame [주차, 지자체명, 가입완료]
+    """
+    df = sheets.get("이용자주간", pd.DataFrame())
+    if df.empty:
+        return pd.DataFrame()
+    df = df.copy()
+
+    # 주차 컬럼 찾기
+    week_col = None
+    for c in df.columns:
+        cl = str(c).replace("\n", "").strip()
+        if "주차" in cl:
+            week_col = c
+            break
+    if week_col is None:
+        return pd.DataFrame()
+
+    # 지자체 컬럼 탐지: MUNICIPALITY_KEYWORDS와 일치하고 "가입률" 등 비율 컬럼 제외
+    mun_cols = []
+    for c in df.columns:
+        cl = str(c).replace("\n", "").replace(" ", "").strip()
+        if any(kw in cl for kw in MUNICIPALITY_KEYWORDS):
+            # 가입률/비중/삭제율 등 파생 컬럼 제외 → 순수 인원수 컬럼만
+            if not any(x in cl for x in ["가입률", "비중", "삭제율", "이용률", "체크율", "응답률"]):
+                mun_cols.append(c)
+
+    if not mun_cols:
+        return pd.DataFrame()
+
+    rows = []
+    for _, row in df.iterrows():
+        week = str(row.get(week_col, "")).strip()
+        if not week or week == "nan":
+            continue
+        for mc in mun_cols:
+            val = safe_numeric(row.get(mc, 0))
+            if val > 0:
+                mun_name = str(mc).replace("\n", "").strip()
+                rows.append({"주차": week, "지자체명": mun_name, "가입완료": val})
+
+    return pd.DataFrame(rows)
+
+
 def get_weekly_municipality_data(sheets: dict, sheet_key: str) -> pd.DataFrame:
     """주차×지자체 형태의 시트를 long-format으로 변환
 
@@ -805,6 +854,7 @@ def build_dashboard_data(sheets: dict) -> dict:
     result["ai_funnel"] = get_ai_funnel(sheets)
     result["ai_monthly"] = get_ai_monthly(sheets)
     result["ai_municipality"] = get_ai_municipality_data(sheets)
+    result["weekly_registered_by_mun"] = get_weekly_registered_by_municipality(sheets)
 
     # 6-1. 심혈관/스트레스 C열(합계) 직접 추출
     for _sheet_key, _result_key in [

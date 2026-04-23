@@ -1630,16 +1630,18 @@ elif page == "❤ 5.심혈관체크":
                                        "심혈관체크 이용자수 + 전체이용비중")
             cf = filter_by_week_range(cardio_users, "주차", p_start, p_end, weeks) if not cardio_users.empty else pd.DataFrame()
             if not cf.empty:
-                # 이용자수 → 이용률 (협약인원 대비 %)
-                _reg_c = data.get("registration", pd.DataFrame())
-                if not _reg_c.empty and "지자체명" in _reg_c.columns and "협약인원" in _reg_c.columns:
-                    _contract_map = {str(r["지자체명"]).strip(): safe_numeric(r["협약인원"])
-                                     for _, r in _reg_c.iterrows() if safe_numeric(r["협약인원"]) > 0}
+                # 이용자수 → 이용률 (주차별 지자체 가입완료 회원 대비 %)
+                _wrm = data.get("weekly_registered_by_mun", pd.DataFrame())
+                if not _wrm.empty:
+                    # (주차, 지자체명) → 가입완료 dict
+                    _reg_week_map = {(str(r["주차"]).strip(), str(r["지자체명"]).strip()): safe_numeric(r["가입완료"])
+                                     for _, r in _wrm.iterrows()}
                     cf = cf.copy()
-                    cf["값"] = cf.apply(
-                        lambda r: round(r["값"] / _contract_map.get(str(r["지자체명"]).strip(), 0) * 100, 1)
-                        if _contract_map.get(str(r["지자체명"]).strip(), 0) > 0 else 0, axis=1)
-                    plot_municipality_lines(cf, "지자체별 심혈관체크 이용률 추이 (협약인원 대비 %)", metric_label="이용률(%)")
+                    def _cardio_rate(r):
+                        denom = _reg_week_map.get((str(r["주차"]).strip(), str(r["지자체명"]).strip()), 0)
+                        return round(r["값"] / denom * 100, 1) if denom > 0 else 0
+                    cf["값"] = cf.apply(_cardio_rate, axis=1)
+                    plot_municipality_lines(cf, "지자체별 심혈관체크 이용률 추이 (가입회원 대비 %)", metric_label="이용률(%)")
                 else:
                     plot_municipality_lines(cf, "지자체별 심혈관체크 이용자 추이", metric_label="이용자수")
         else:
@@ -2557,16 +2559,17 @@ elif page == "😰 6.스트레스체크":
                                        "스트레스체크 이용자수 + 전체이용비중")
             sf = filter_by_week_range(stress_users, "주차", p_start, p_end, weeks) if not stress_users.empty else pd.DataFrame()
             if not sf.empty:
-                # 이용자수 → 이용률 (협약인원 대비 %)
-                _reg_s = data.get("registration", pd.DataFrame())
-                if not _reg_s.empty and "지자체명" in _reg_s.columns and "협약인원" in _reg_s.columns:
-                    _contract_map_s = {str(r["지자체명"]).strip(): safe_numeric(r["협약인원"])
-                                       for _, r in _reg_s.iterrows() if safe_numeric(r["협약인원"]) > 0}
+                # 이용자수 → 이용률 (주차별 지자체 가입완료 회원 대비 %)
+                _wrm_s = data.get("weekly_registered_by_mun", pd.DataFrame())
+                if not _wrm_s.empty:
+                    _reg_week_map_s = {(str(r["주차"]).strip(), str(r["지자체명"]).strip()): safe_numeric(r["가입완료"])
+                                       for _, r in _wrm_s.iterrows()}
                     sf = sf.copy()
-                    sf["값"] = sf.apply(
-                        lambda r: round(r["값"] / _contract_map_s.get(str(r["지자체명"]).strip(), 0) * 100, 1)
-                        if _contract_map_s.get(str(r["지자체명"]).strip(), 0) > 0 else 0, axis=1)
-                    plot_municipality_lines(sf, "지자체별 스트레스체크 이용률 추이 (협약인원 대비 %)", metric_label="이용률(%)")
+                    def _stress_rate(r):
+                        denom = _reg_week_map_s.get((str(r["주차"]).strip(), str(r["지자체명"]).strip()), 0)
+                        return round(r["값"] / denom * 100, 1) if denom > 0 else 0
+                    sf["값"] = sf.apply(_stress_rate, axis=1)
+                    plot_municipality_lines(sf, "지자체별 스트레스체크 이용률 추이 (가입회원 대비 %)", metric_label="이용률(%)")
                 else:
                     plot_municipality_lines(sf, "지자체별 스트레스체크 이용자 추이", metric_label="이용자수")
         else:
