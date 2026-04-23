@@ -2923,52 +2923,43 @@ elif page == "🤖 AI 생활지원사":
                     ("program(%)",          "프로그램 완료율"),
                 ]
 
-                fig_all = go.Figure()
+                # ── 지자체별 개별 그래프 ────────────────────────────────────
                 for mun in muns:
                     sub = mun_only[mun_only["지자체"] == mun].copy()
                     if sub.empty:
                         continue
                     alarm_day = sub["알람요일"].iloc[0] if "알람요일" in sub.columns else ""
-                    mun_label = f"{mun}({alarm_day})" if alarm_day else mun
+                    mun_label = f"{mun} ({alarm_day})" if alarm_day else mun
+                    color_base = MUN_COLORS.get(mun, "#607D8B")
                     shades = MUN_SHADES.get(mun, DEFAULT_SHADES)
 
+                    fig_m = go.Figure()
                     for m_col, m_label in METRIC_DEF:
                         vals = sub[m_col].apply(safe_numeric) if m_col in sub.columns else pd.Series([0]*len(sub))
                         color = shades.get(m_col, "#607D8B")
-                        fig_all.add_trace(go.Bar(
+                        fig_m.add_trace(go.Bar(
                             x=sub["기간"],
                             y=vals,
-                            name=f"{mun_label} {m_label}",
-                            legendgroup=mun,
-                            legendgrouptitle_text=mun_label,
+                            name=m_label,
                             marker_color=color,
                             text=vals.apply(lambda v: f"{v:.0f}%" if v > 0 else ""),
                             textposition="outside",
-                            textfont=dict(size=16),
-                            hovertemplate=(
-                                f"<b>%{{x}}</b><br>"
-                                f"{mun_label}<br>"
-                                f"{m_label}: <b>%{{y:.1f}}%</b><extra></extra>"
-                            ),
+                            textfont=dict(size=15),
+                            hovertemplate=f"<b>%{{x}}</b><br>{m_label}: <b>%{{y:.1f}}%</b><extra></extra>",
                         ))
-
-                fig_all.update_layout(
-                    title="주차별 참여율 비교 — 지자체별 색상 / 진→연: 인트로·서비스·프로그램",
-                    height=500,
-                    barmode="group",
-                    bargap=0.15,
-                    bargroupgap=0.05,
-                    hovermode="x unified",
-                    xaxis=dict(type="category", title=""),
-                    yaxis=dict(title="참여율 (%)", range=[0, 110]),
-                    legend=dict(
-                        orientation="h", yanchor="top", y=-0.25,
-                        xanchor="center", x=0.5, font=dict(size=8),
-                        groupclick="toggleitem",
-                    ),
-                    margin=dict(t=50, b=120),
-                )
-                st.plotly_chart(fig_all, use_container_width=True)
+                    fig_m.update_layout(
+                        title=dict(text=mun_label, font=dict(size=16, color=color_base)),
+                        height=380,
+                        barmode="group",
+                        bargap=0.2,
+                        hovermode="x unified",
+                        xaxis=dict(type="category", title=""),
+                        yaxis=dict(title="참여율 (%)", range=[0, 115]),
+                        legend=dict(orientation="h", yanchor="top", y=-0.18,
+                                    xanchor="center", x=0.5),
+                        margin=dict(t=50, b=80),
+                    )
+                    st.plotly_chart(fig_m, use_container_width=True)
 
                 # ── 상세 데이터 표 ─────────────────────────────────────────
                 with st.expander("상세 데이터 보기"):
