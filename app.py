@@ -44,7 +44,13 @@ st.set_page_config(
 # 🔐 비밀번호 보호
 # ============================================================
 def _check_password() -> bool:
-    """비밀번호 확인 — 통과 시 True 반환"""
+    """비밀번호 확인 — 통과 시 True 반환
+    REQUIRE_AUTH=true 일 때만 비밀번호 요구 (로컬에서는 자동 통과)
+    """
+    # 로컬 실행 시 비밀번호 스킵 (secrets에 REQUIRE_AUTH=true 없으면 통과)
+    if str(st.secrets.get("REQUIRE_AUTH", "false")).lower() != "true":
+        return True
+
     if st.session_state.get("authenticated"):
         return True
 
