@@ -976,7 +976,6 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
     # 안부체크 일별 데이터에서 최근 7일 평균 안부체크율
     cd = data.get("checkin_daily", pd.DataFrame())
     if not cd.empty and "안부체크율" in cd.columns:
-        # 0 제외 후 최근 7일 평균
         cd_valid = cd[cd["안부체크율"].apply(safe_numeric) > 0].copy()
         if not cd_valid.empty:
             recent7 = cd_valid.tail(7)
@@ -986,6 +985,20 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
         if latest is not None:
             summary["전체회원"] = safe_numeric(latest.get("전체회원", 0))
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
+
+    # 안부확인율: 안부확인지자체 시트(checkin_municipality_rate)에서 해당 주차 평균
+    # 시작일 기준으로 해당 주차 행만 필터링 → 전체 지자체 평균
+    cr = data.get("checkin_municipality_rate", pd.DataFrame())
+    if not cr.empty and "안부확인율" in cr.columns and "시작일" in cr.columns:
+        start_date = summary.get("시작일", "")
+        if start_date:
+            week_cr = cr[cr["시작일"].astype(str).str.strip() == str(start_date).strip()]
+        else:
+            # 시작일 없으면 전체에서 최신 주차 사용
+            week_cr = cr[cr["시작일"] == cr["시작일"].max()]
+        valid_cr = week_cr[week_cr["안부확인율"].apply(safe_numeric) > 0]
+        if not valid_cr.empty:
+            summary["안부확인율"] = round(valid_cr["안부확인율"].apply(safe_numeric).mean(), 1)
 
     return summary
 

@@ -632,7 +632,7 @@ if page == "📋 Summary":
             ("총 협약인원", total_contract, 0, "명", "metric-card", False),
             ("총 가입완료", cur_registered, prev_registered, "명", "metric-card-green", False),
             ("전체 가입률", total_reg_rate, 0, "%", "metric-card", False),
-            ("안부체크율", summary.get("안부체크율", 0), prev_summary.get("안부체크율", 0), "%", "metric-card-orange", False),
+            ("안부확인율", summary.get("안부확인율", summary.get("안부체크율", 0)), prev_summary.get("안부확인율", prev_summary.get("안부체크율", 0)), "%", "metric-card-orange", False),
         ]
         for col, (label, val, prev_val, suffix, card_cls, invert) in zip(cols, kpi_data):
             delta = float(val) - float(prev_val) if prev_val else 0
