@@ -41,6 +41,48 @@ st.set_page_config(
 )
 
 # ============================================================
+# 🔐 비밀번호 보호
+# ============================================================
+def _check_password() -> bool:
+    """비밀번호 확인 — 통과 시 True 반환"""
+    if st.session_state.get("authenticated"):
+        return True
+
+    # 중앙 정렬된 로그인 카드
+    st.markdown("""
+    <style>
+    #login-wrap {
+        max-width: 400px; margin: 80px auto; padding: 2.5rem 2rem;
+        background: white; border-radius: 20px;
+        box-shadow: 0 8px 32px rgba(102,126,234,0.18);
+        text-align: center;
+    }
+    #login-wrap h2 { color: #667eea; margin-bottom: 0.2rem; }
+    #login-wrap p  { color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    </style>
+    <div id="login-wrap">
+      <h2>📊 와플랫 공공 대시보드</h2>
+      <p>접근 권한이 필요합니다</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col = st.columns([1, 2, 1])[1]
+    with col:
+        pw = st.text_input("비밀번호", type="password", label_visibility="collapsed",
+                           placeholder="비밀번호를 입력하세요")
+        if st.button("로그인", use_container_width=True, type="primary"):
+            correct = st.secrets.get("PASSWORD", "waflat2025!")
+            if pw == correct:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("비밀번호가 틀렸습니다.")
+    return False
+
+if not _check_password():
+    st.stop()
+
+# ============================================================
 # 커스텀 CSS
 # ============================================================
 st.markdown("""
@@ -140,6 +182,18 @@ def load_all_data():
     sheets = fetch_all_sheets()
     data = build_dashboard_data(sheets)
     return sheets, data
+
+
+@st.cache_data(ttl=14400, show_spinner=False)
+def cached_heatmap(_data: dict, week: str) -> "pd.DataFrame":
+    """지자체 히트맵 — 주차별 캐시 (페이지 재진입 시 즉시 반환)"""
+    return build_municipality_heatmap_data(_data, week)
+
+
+@st.cache_data(ttl=14400, show_spinner=False)
+def cached_week_summary(_sheets: dict, _data: dict, week: str) -> dict:
+    """주차 요약 — 주차별 캐시"""
+    return get_week_summary(_sheets, _data, week)
 
 try:
     sheets, data = load_all_data()
@@ -249,8 +303,10 @@ with st.sidebar:
     st.caption("4시간마다 자동 새로고침")
 
     if DATA_LOADED:
-        # 데이터 소스 상태
-        agency_stats = get_agency_summary(sheets)
+        # 데이터 소스 상태 — session_state에 캐시해 DB 쿼리 반복 방지
+        if "agency_stats" not in st.session_state:
+            st.session_state["agency_stats"] = get_agency_summary(sheets)
+        agency_stats = st.session_state["agency_stats"]
         if agency_stats.get("total", 0) > 0:
             st.caption(f"🏛 지자체 {agency_stats.get('active', 0)}개 운영 중")
             st.caption(f"🛡 세이프 {agency_stats.get('safe_count', 0)} | 📋 베이직 {agency_stats.get('basic_count', 0)}")
@@ -337,6 +393,40 @@ def plot_weekly_series(df, x_col, y_col, title, color="#2F5496", height=300):
         selector=dict(type="scatter", fill="tozeroy"),
     )
     st.plotly_chart(fig, use_container_width=True)
+
+def plot_bar_rate_dual(df, x_col, bar_col, bar_label, bar_color,
+                       line_col, line_label, line_color,
+                       title, bar_unit="명", line_unit="%", height=430):
+    """이용자수(막대) + 이용률(꺾은선) 통합 듀얼 Y축 차트 — 모든 서비스 페이지 공통"""
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    valid = df[df[x_col].astype(str).str.strip() != "nan"].copy()
+    bar_vals = valid[bar_col].apply(safe_numeric)
+    fig.add_trace(go.Bar(
+        x=valid[x_col], y=bar_vals, name=bar_label,
+        marker_color=bar_color, opacity=0.85,
+        text=bar_vals.apply(lambda v: f"{int(v):,}" if v == int(v) else f"{v:.1f}"),
+        textposition="outside", textfont=dict(size=13),
+        hovertemplate=f"<b>%{{x}}</b><br>{bar_label}: %{{y:,}}{bar_unit}<extra></extra>"
+    ), secondary_y=False)
+    if line_col and line_col in valid.columns:
+        line_vals = valid[line_col].apply(safe_numeric)
+        fig.add_trace(go.Scatter(
+            x=valid[x_col], y=line_vals, name=line_label,
+            mode="lines+markers+text",
+            line=dict(color=line_color, width=2),
+            text=line_vals.apply(lambda v: f"{v:.1f}{line_unit}"),
+            textposition="top center", textfont=dict(size=13, color=line_color),
+            hovertemplate=f"<b>%{{x}}</b><br>{line_label}: %{{y:.1f}}{line_unit}<extra></extra>"
+        ), secondary_y=True)
+    fig.update_layout(
+        title=title, height=height, hovermode="x unified",
+        xaxis=dict(type="category"),
+        legend=LEGEND_BELOW, margin=dict(t=40, b=70), bargap=0.3,
+    )
+    fig.update_yaxes(title_text=bar_unit, secondary_y=False)
+    fig.update_yaxes(title_text=line_unit, secondary_y=True, showgrid=False)
+    st.plotly_chart(fig, use_container_width=True)
+
 
 def plot_municipality_bar(df, value_col, title, color_map=None, height=400):
     """지자체별 바 차트 (내림차순 정렬)"""
@@ -495,9 +585,9 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
 # ============================================================
 if page == "📋 Summary":
     if selected_week:
-        summary = get_week_summary(sheets, data, selected_week)
+        summary = cached_week_summary(sheets, data, selected_week)
         prev_week = get_prev_week(selected_week)
-        prev_summary = get_week_summary(sheets, data, prev_week) if prev_week else {}
+        prev_summary = cached_week_summary(sheets, data, prev_week) if prev_week else {}
 
         st.markdown(f'<div class="section-header">📅 {selected_week}주차 ({summary.get("시작일", "")}) 운영 현황</div>', unsafe_allow_html=True)
 
@@ -841,7 +931,7 @@ if page == "📋 Summary":
             st.markdown("")
 
         # 히트맵
-        heatmap_df = build_municipality_heatmap_data(data, selected_week)
+        heatmap_df = cached_heatmap(data, selected_week)
         # 해당 주차 기준 계약 중인 지자체만 필터링 (부분 매칭 지원)
         active_list = get_active_agencies_for_week(selected_week)
         if active_list and not heatmap_df.empty:
@@ -1168,7 +1258,7 @@ elif page == "👥 1.회원가입 & 이탈":
             # 히트맵에 있는 활성 지자체만 표시
             active_list = get_active_agencies()
             heatmap_muns = set()
-            hm_df = build_municipality_heatmap_data(data, selected_week)
+            hm_df = cached_heatmap(data, selected_week)
             if not hm_df.empty:
                 heatmap_muns = set(hm_df["지자체명"].tolist())
             if heatmap_muns:
@@ -1292,6 +1382,9 @@ elif page == "🖐 2.안부확인":
             daily["AI케어응답률"] = (daily["ai_care_response_count"] / daily["ai_care_generate_count"].replace(0, float("nan")) * 100).round(1).fillna(0)
         if "안부확인콜응답률" not in daily.columns or daily["안부확인콜응답률"].sum() == 0:
             daily["안부확인콜응답률"] = (daily["call_response_count"] / daily["call_generate_count"].replace(0, float("nan")) * 100).round(1).fillna(0)
+
+        # 4/19, 4/20 데이터 제외 (미완료 데이터)
+        daily = daily[~daily["date"].isin(["26-04-19", "26-04-20"])]
 
         st.caption(f"데이터 기간: {daily['date'].min()} ~ {daily['date'].max()}")
 
@@ -1549,95 +1642,69 @@ elif page == "❤ 5.심혈관체크":
 
     with tab1:
         cardio_users = data.get("weekly_심혈관이용자", pd.DataFrame())
-        if not cardio_users.empty:
-            # C열(합계) 우선 사용, 없으면 지자체별 합산
+        cardio_user_raw = sheets.get("심혈관이용자", pd.DataFrame())
+        if not cardio_user_raw.empty:
+            cu = cardio_user_raw.copy()
+            _wc, _sum_col, _rc = None, None, None
+            for c in cu.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl and _wc is None: _wc = c
+                elif ("이용자합계" in cl or ("합계" in cl and "이용자" in cl)) and _sum_col is None: _sum_col = c
+                elif ("전체이용비중" in cl or "이용비중" in cl) and _rc is None: _rc = c
+            # C열 합계 우선
             cardio_total_c = data.get("total_심혈관이용자", pd.DataFrame())
-            if not cardio_total_c.empty:
-                ct = filter_by_week_range(cardio_total_c, "주차", p_start, p_end, weeks)
-                ct = ct.rename(columns={"값": "이용자합계"})
-                plot_weekly_series(ct, "주차", "이용자합계", "심혈관체크 전체 이용자 추이", "#E91E63")
-            else:
-                cf = filter_by_week_range(cardio_users, "주차", p_start, p_end, weeks)
-                total = cf.pipe(weekly_total)
-                total = total.rename(columns={"값": "이용자합계"})
-                plot_weekly_series(total, "주차", "이용자합계", "심혈관체크 전체 이용자 추이", "#E91E63")
-            cf = filter_by_week_range(cardio_users, "주차", p_start, p_end, weeks)
-
-            # 전체이용비중 (심혈관이용자 시트)
-            cardio_user_raw = sheets.get("심혈관이용자", pd.DataFrame())
-            if not cardio_user_raw.empty:
-                cu = cardio_user_raw.copy()
-                _wc, _rc = None, None
-                for c in cu.columns:
-                    cl = str(c).replace("\n", "").strip()
-                    if "주차" in cl: _wc = c
-                    elif "전체이용비중" in cl or "이용비중" in cl: _rc = c
-                if _wc and _rc:
-                    cu[_rc] = cu[_rc].apply(safe_numeric)
-                    cu = cu[cu[_wc].astype(str).str.strip() != "nan"]
-                    # 기간 필터 적용
-                    if p_start:
-                        cu = filter_by_week_range(cu, _wc, p_start, p_end, weeks)
-                    cu = shorten_dates_in_df(cu, _wc)
-                    fig_r = go.Figure()
-                    fig_r.add_trace(go.Scatter(x=cu[_wc], y=cu[_rc], mode="lines+markers",
-                        name="전체이용비중", line=dict(color="#AD1457", width=2),
-                        hovertemplate="%{y:.1f}%<extra>전체이용비중</extra>"))
-                    fig_r.update_layout(title="전체이용비중 (전체 회원 대비 이용자 %)", height=300,
-                        xaxis=dict(type="category"), yaxis=dict(title="%"),
-                        margin=dict(t=40, b=60, l=40, r=10), hovermode="x unified")
-                    st.plotly_chart(fig_r, use_container_width=True)
-
-            plot_municipality_lines(cf, "지자체별 심혈관체크 이용자 추이", metric_label="이용자수")
+            if _wc:
+                cu = filter_by_week_range(cu, _wc, p_start, p_end, weeks)
+                cu = shorten_dates_in_df(cu, _wc)
+                if not cardio_total_c.empty:
+                    ct = filter_by_week_range(cardio_total_c, "주차", p_start, p_end, weeks)
+                    ct = shorten_dates_in_df(ct, "주차")
+                    cu = cu.copy()
+                    ct_map = dict(zip(ct["주차"], ct["값"].apply(safe_numeric)))
+                    cu["_bar"] = cu[_wc].map(ct_map).fillna(cu[_sum_col].apply(safe_numeric) if _sum_col else 0)
+                    bar_col_use = "_bar"
+                else:
+                    bar_col_use = _sum_col
+                if bar_col_use:
+                    plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#E91E63",
+                                       _rc, "전체이용비중", "#AD1457",
+                                       "심혈관체크 이용자수 + 전체이용비중")
+            cf = filter_by_week_range(cardio_users, "주차", p_start, p_end, weeks) if not cardio_users.empty else pd.DataFrame()
+            if not cf.empty:
+                plot_municipality_lines(cf, "지자체별 심혈관체크 이용자 추이", metric_label="이용자수")
         else:
             st.info("심혈관 이용자 데이터가 없습니다.")
 
     with tab2:
         cardio_exam = data.get("weekly_심혈관검사", pd.DataFrame())
-        if not cardio_exam.empty:
-            # C열(합계) 우선 사용
+        cardio_exam_raw = sheets.get("심혈관검사횟수", pd.DataFrame())
+        if not cardio_exam_raw.empty:
+            ce = cardio_exam_raw.copy()
+            _wc, _sum_col, _awc = None, None, None
+            for c in ce.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl and _wc is None: _wc = c
+                elif "합계" in cl and _sum_col is None: _sum_col = c
+                elif "1인" in cl and "주평균" in cl and _awc is None: _awc = c
             cardio_exam_total_c = data.get("total_심혈관검사", pd.DataFrame())
-            if not cardio_exam_total_c.empty:
-                cet = filter_by_week_range(cardio_exam_total_c, "주차", p_start, p_end, weeks)
-                cet = cet.rename(columns={"값": "검사횟수합계"})
-                plot_weekly_series(cet, "주차", "검사횟수합계", "심혈관 검사횟수 추이", "#9C27B0")
-            else:
-                cf2 = filter_by_week_range(cardio_exam, "주차", p_start, p_end, weeks)
-                total = cf2.pipe(weekly_total)
-                total = total.rename(columns={"값": "검사횟수합계"})
-                plot_weekly_series(total, "주차", "검사횟수합계", "심혈관 검사횟수 추이", "#9C27B0")
-            cf = filter_by_week_range(cardio_exam, "주차", p_start, p_end, weeks)
-
-            # 1인 주평균 / 1인 일평균 (심혈관검사횟수 시트)
-            cardio_exam_raw = sheets.get("심혈관검사횟수", pd.DataFrame())
-            if not cardio_exam_raw.empty:
-                ce = cardio_exam_raw.copy()
-                _wc, _awc, _adc = None, None, None
-                for c in ce.columns:
-                    cl = str(c).replace("\n", "").strip()
-                    if "주차" in cl: _wc = c
-                    elif "1인" in cl and "주평균" in cl: _awc = c
-                    elif "1인" in cl and "일평균" in cl: _adc = c
-                if _wc and (_awc or _adc):
-                    ce = ce[ce[_wc].astype(str).str.strip() != "nan"]
-                    fig_a = go.Figure()
-                    if _awc:
-                        ce[_awc] = ce[_awc].apply(safe_numeric)
-                        fig_a.add_trace(go.Scatter(x=ce[_wc], y=ce[_awc], mode="lines+markers",
-                            name="1인 주평균", line=dict(color="#6A1B9A", width=2),
-                            hovertemplate="%{y:.1f}회<extra>1인 주평균</extra>"))
-                    if _adc:
-                        ce[_adc] = ce[_adc].apply(safe_numeric)
-                        fig_a.add_trace(go.Scatter(x=ce[_wc], y=ce[_adc], mode="lines+markers",
-                            name="1인 일평균", line=dict(color="#FF6F00", width=2),
-                            hovertemplate="%{y:.2f}회<extra>1인 일평균</extra>"))
-                    fig_a.update_layout(title="1인당 평균 검사횟수", height=300,
-                        xaxis=dict(type="category"), yaxis=dict(title="횟수"),
-                        margin=dict(t=40, b=60, l=40, r=10), hovermode="x unified",
-                        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
-                    st.plotly_chart(fig_a, use_container_width=True)
-
-            plot_municipality_lines(cf, "지자체별 심혈관 검사횟수 추이", metric_label="검사횟수")
+            if _wc:
+                ce = filter_by_week_range(ce, _wc, p_start, p_end, weeks)
+                ce = shorten_dates_in_df(ce, _wc)
+                if not cardio_exam_total_c.empty:
+                    cet = filter_by_week_range(cardio_exam_total_c, "주차", p_start, p_end, weeks)
+                    cet = shorten_dates_in_df(cet, "주차")
+                    ct_map = dict(zip(cet["주차"], cet["값"].apply(safe_numeric)))
+                    ce["_bar"] = ce[_wc].map(ct_map).fillna(ce[_sum_col].apply(safe_numeric) if _sum_col else 0)
+                    bar_col_use = "_bar"
+                else:
+                    bar_col_use = _sum_col
+                if bar_col_use:
+                    plot_bar_rate_dual(ce, _wc, bar_col_use, "검사횟수", "#9C27B0",
+                                       _awc, "1인 주평균", "#FF6F00",
+                                       "심혈관 검사횟수 + 1인 주평균", bar_unit="회", line_unit="회")
+            cf = filter_by_week_range(cardio_exam, "주차", p_start, p_end, weeks) if not cardio_exam.empty else pd.DataFrame()
+            if not cf.empty:
+                plot_municipality_lines(cf, "지자체별 심혈관 검사횟수 추이", metric_label="검사횟수")
         else:
             st.info("심혈관 검사횟수 데이터가 없습니다.")
 
@@ -1690,7 +1757,7 @@ elif page == "💊 7.복약관리":
                     name="이용자 수 합계",
                     marker_color="#424242",
                     text=mr[_sum_col].apply(lambda x: f"{x:,.0f}"),
-                    textposition="outside", textfont=dict(size=9),
+                    textposition="outside", textfont=dict(size=13),
                     hovertemplate="<b>%{x}</b><br>이용자수: %{y:,}명<extra></extra>"
                 ), secondary_y=False)
                 if _ratio_col:
@@ -1700,7 +1767,7 @@ elif page == "💊 7.복약관리":
                         mode="lines+markers+text",
                         line=dict(color="#FF6F00", width=2),
                         text=mr[_ratio_col].apply(lambda x: f"{x:.0f}%"),
-                        textposition="top center", textfont=dict(size=9, color="#FF6F00"),
+                        textposition="top center", textfont=dict(size=13, color="#FF6F00"),
                         hovertemplate="<b>%{x}</b><br>비율: %{y:.1f}%<extra></extra>"
                     ), secondary_y=True)
                 fig.update_layout(
@@ -1722,49 +1789,39 @@ elif page == "💊 7.복약관리":
             st.info("복약 등록 회원수 데이터가 없습니다.")
 
     with tab2:
-        # 활성 이용자 복약 등록건수 — C열(합계) 우선 사용
+        med_count_raw = sheets.get("복약등록건수", pd.DataFrame())
         med_count_c = data.get("total_복약등록건수", pd.DataFrame())
-        if not med_count_c.empty:
-            mc = filter_by_week_range(med_count_c, "주차", p_start, p_end, weeks)
-            mc = mc.rename(columns={"값": "등록건수합계"})
-            mc = shorten_dates_in_df(mc, "주차")
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=mc["주차"], y=mc["등록건수합계"],
-                name="합계",
-                marker_color="#424242",
-                text=mc["등록건수합계"].apply(lambda x: f"{x:,.0f}"),
-                textposition="outside", textfont=dict(size=9),
-                hovertemplate="<b>%{x}</b><br>등록건수: %{y:,}건<extra></extra>"
-            ))
-            fig.update_layout(
-                title="활성 이용자 복약 등록건수",
-                height=420, hovermode="x unified",
-                xaxis=dict(type="category"),
-                margin=dict(t=40, b=60),
-                bargap=0.3,
-            )
-            fig.update_yaxes(title_text="등록건수")
-            st.plotly_chart(fig, use_container_width=True)
+        if not med_count_raw.empty:
+            mc_raw = med_count_raw.copy()
+            _wc, _sum_col, _rc = None, None, None
+            for c in mc_raw.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl and _wc is None: _wc = c
+                elif "합계" in cl and _sum_col is None: _sum_col = c
+                elif ("전체이용비중" in cl or "이용비중" in cl) and _rc is None: _rc = c
+            if _wc:
+                mc_raw = filter_by_week_range(mc_raw, _wc, p_start, p_end, weeks)
+                mc_raw = shorten_dates_in_df(mc_raw, _wc)
+                if not med_count_c.empty:
+                    mct = filter_by_week_range(med_count_c, "주차", p_start, p_end, weeks)
+                    mct = shorten_dates_in_df(mct, "주차")
+                    ct_map = dict(zip(mct["주차"], mct["값"].apply(safe_numeric)))
+                    mc_raw["_bar"] = mc_raw[_wc].map(ct_map).fillna(mc_raw[_sum_col].apply(safe_numeric) if _sum_col else 0)
+                    bar_col_use = "_bar"
+                else:
+                    bar_col_use = _sum_col
+                if bar_col_use:
+                    plot_bar_rate_dual(mc_raw, _wc, bar_col_use, "등록건수", "#424242",
+                                       _rc, "전체이용비중", "#FF6F00",
+                                       "활성 이용자 복약 등록건수 + 전체이용비중", bar_unit="건")
         elif not med_count.empty:
-            # fallback: 지자체별 합산
             mf = filter_by_week_range(med_count, "주차", p_start, p_end, weeks)
             total = mf.groupby("주차")["값"].sum().reset_index()
             total.columns = ["주차", "등록건수합계"]
             total = shorten_dates_in_df(total, "주차")
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=total["주차"], y=total["등록건수합계"],
-                name="합계", marker_color="#424242",
-                text=total["등록건수합계"].apply(lambda x: f"{x:,.0f}"),
-                textposition="outside", textfont=dict(size=9),
-                hovertemplate="<b>%{x}</b><br>등록건수: %{y:,}건<extra></extra>"
-            ))
-            fig.update_layout(title="활성 이용자 복약 등록건수", height=420,
-                              hovermode="x unified", xaxis=dict(type="category"),
-                              margin=dict(t=40, b=60), bargap=0.3)
-            fig.update_yaxes(title_text="등록건수")
-            st.plotly_chart(fig, use_container_width=True)
+            plot_bar_rate_dual(total, "주차", "등록건수합계", "등록건수", "#424242",
+                               None, None, None,
+                               "활성 이용자 복약 등록건수", bar_unit="건")
         else:
             st.info("복약 등록건수 데이터가 없습니다.")
 
@@ -2005,7 +2062,9 @@ elif page == "🔄 4.지자체별 안부체크 변경":
 
             # 기간 필터 적용
             df_basic = df[(df[date_col].astype(str) >= basic_start) & (df[date_col].astype(str) <= basic_end)].copy()
-            df_basic = df_basic.sort_values(date_col)  # 날짜 오름차순 정렬
+            # datetime 파싱으로 정확한 날짜 정렬
+            df_basic["_sort"] = pd.to_datetime(df_basic[date_col].astype(str), errors="coerce")
+            df_basic = df_basic.sort_values("_sort").drop(columns=["_sort"])
             df_basic = shorten_dates_in_df(df_basic, date_col)
 
             # 총합, 총 안부상태변경률 컬럼 찾기
@@ -2067,11 +2126,15 @@ elif page == "🔄 4.지자체별 안부체크 변경":
                             rows.append({"날짜": d, "지자체명": mun, "변경건": val})
                 if rows:
                     mun_df = pd.DataFrame(rows)
-                    mun_df = mun_df.sort_values("날짜")  # 날짜 오름차순 정렬
+                    # 날짜를 datetime으로 파싱하여 정확히 정렬
+                    mun_df["_sort"] = pd.to_datetime("20" + mun_df["날짜"], errors="coerce")
+                    mun_df = mun_df.sort_values("_sort").drop(columns=["_sort"])
+                    sorted_dates = mun_df["날짜"].unique().tolist()
                     fig2 = px.line(mun_df, x="날짜", y="변경건", color="지자체명", markers=True)
                     fig2.update_layout(
                         title="지자체별 안부상태 변경건 추이", height=400,
-                        xaxis=dict(type="category"), hovermode="x unified",
+                        xaxis=dict(type="category", categoryorder="array", categoryarray=sorted_dates),
+                        hovermode="x unified",
                         margin=dict(t=40, b=60, l=40, r=10),
                         legend=LEGEND_BELOW_LARGE,
                     )
@@ -2293,25 +2356,36 @@ elif page == "🎮 10.맞고(와플랫+게스트)":
                 per_play_col = next((c for c in num_cols if "1인당" in str(c) and "플레이판" in str(c)), None)
 
                 if user_col and play_col:
+                    # 이용자수(막대, 좌) + 플레이판수(꺾은선, 우) 듀얼 Y축
                     fig = make_subplots(specs=[[{"secondary_y": True}]])
-                    fig.add_trace(go.Bar(x=matgo_all[week_col], y=matgo_all[user_col], name="이용자수",
-                                         marker_color="#FF6F00",
-                                         hovertemplate="%{y:,}명<extra>이용자수</extra>"), secondary_y=False)
-                    fig.add_trace(go.Bar(x=matgo_all[week_col], y=matgo_all[play_col], name="플레이판수",
-                                         marker_color="#FFB74D",
-                                         hovertemplate="%{y:,}판<extra>플레이판수</extra>"), secondary_y=False)
+                    fig.add_trace(go.Bar(
+                        x=matgo_all[week_col], y=matgo_all[user_col], name="이용자수",
+                        marker_color="#FF6F00", opacity=0.85,
+                        text=matgo_all[user_col].apply(lambda v: f"{int(v):,}" if pd.notna(v) else ""),
+                        textposition="outside", textfont=dict(size=9),
+                        hovertemplate="%{y:,}명<extra>이용자수</extra>"
+                    ), secondary_y=False)
+                    fig.add_trace(go.Scatter(
+                        x=matgo_all[week_col], y=matgo_all[play_col], name="플레이판수",
+                        mode="lines+markers+text",
+                        line=dict(color="#FFB74D", width=2),
+                        text=matgo_all[play_col].apply(lambda v: f"{int(v):,}" if pd.notna(v) else ""),
+                        textposition="top center", textfont=dict(size=9, color="#E65100"),
+                        hovertemplate="%{y:,}판<extra>플레이판수</extra>"
+                    ), secondary_y=True)
                     if per_play_col:
-                        fig.add_trace(go.Scatter(x=matgo_all[week_col], y=matgo_all[per_play_col],
-                                                  name="1인당 플레이판수", mode="lines+markers",
-                                                  line=dict(color="#D32F2F", width=2),
-                                                  hovertemplate="%{y:.1f}판<extra>1인당</extra>"), secondary_y=True)
+                        fig.add_trace(go.Scatter(
+                            x=matgo_all[week_col], y=matgo_all[per_play_col],
+                            name="1인당 플레이판수", mode="lines+markers",
+                            line=dict(color="#D32F2F", width=2, dash="dot"),
+                            hovertemplate="%{y:.1f}판<extra>1인당</extra>"
+                        ), secondary_y=True)
                     fig.update_layout(title="맞고(와플랫+게스트) 이용 현황", height=420,
-                                      hovermode="x unified", barmode="group",
+                                      hovermode="x unified",
                                       xaxis=dict(type="category"),
-                                      legend=LEGEND_BELOW, margin=dict(t=40, b=70))
-                    fig.update_yaxes(title_text="명/판", secondary_y=False)
-                    if per_play_col:
-                        fig.update_yaxes(title_text="1인당 판수", secondary_y=True)
+                                      legend=LEGEND_BELOW, margin=dict(t=40, b=70), bargap=0.3)
+                    fig.update_yaxes(title_text="이용자수 (명)", secondary_y=False)
+                    fig.update_yaxes(title_text="플레이판수 (판)", secondary_y=True, showgrid=False)
                     st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
@@ -2355,24 +2429,50 @@ elif page == "🃏 11.맞고(와플랫)":
     tab1, tab2, tab3 = st.tabs(["이용자수", "플레이 판수", "플레이 시간"])
 
     with tab1:
+        matgo_user_raw = sheets.get("맞고이용자", pd.DataFrame())
         df = data.get("weekly_맞고이용자", pd.DataFrame())
-        if not df.empty:
-            df = filter_by_week_range(df, "주차", p_start, p_end, weeks)
-            total = df.pipe(weekly_total)
-            total = total.rename(columns={"값": "이용자합계"})
-            plot_weekly_series(total, "주차", "이용자합계", "맞고(와플랫) 이용자수 추이", "#FF6F00")
-            plot_municipality_lines(df, "지자체별 맞고 이용자수", metric_label="이용자수")
+        if not matgo_user_raw.empty:
+            mu = matgo_user_raw.copy()
+            _wc, _sum_col, _rc = None, None, None
+            for c in mu.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl and _wc is None: _wc = c
+                elif ("이용자합계" in cl or ("합계" in cl and "이용자" in cl)) and _sum_col is None: _sum_col = c
+                elif ("전체이용비중" in cl or "이용비중" in cl) and _rc is None: _rc = c
+            if _wc:
+                mu = filter_by_week_range(mu, _wc, p_start, p_end, weeks)
+                mu = shorten_dates_in_df(mu, _wc)
+                if _sum_col:
+                    plot_bar_rate_dual(mu, _wc, _sum_col, "이용자수", "#FF6F00",
+                                       _rc, "전체이용비중", "#E65100",
+                                       "맞고(와플랫) 이용자수 + 전체이용비중")
+            if not df.empty:
+                dff = filter_by_week_range(df, "주차", p_start, p_end, weeks)
+                plot_municipality_lines(dff, "지자체별 맞고 이용자수", metric_label="이용자수")
         else:
             st.info("데이터 없음")
 
     with tab2:
+        matgo_play_raw = sheets.get("맞고플레이판수", pd.DataFrame())
         df = data.get("weekly_맞고플레이판수", pd.DataFrame())
-        if not df.empty:
-            df = filter_by_week_range(df, "주차", p_start, p_end, weeks)
-            total = df.pipe(weekly_total)
-            total = total.rename(columns={"값": "플레이판수합계"})
-            plot_weekly_series(total, "주차", "플레이판수합계", "맞고(와플랫) 플레이 판수 추이", "#E65100")
-            plot_municipality_lines(df, "지자체별 플레이 판수", metric_label="판수")
+        if not matgo_play_raw.empty:
+            mp = matgo_play_raw.copy()
+            _wc, _sum_col, _awc = None, None, None
+            for c in mp.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl and _wc is None: _wc = c
+                elif "합계" in cl and _sum_col is None: _sum_col = c
+                elif "1인" in cl and "주평균" in cl and _awc is None: _awc = c
+            if _wc:
+                mp = filter_by_week_range(mp, _wc, p_start, p_end, weeks)
+                mp = shorten_dates_in_df(mp, _wc)
+                if _sum_col:
+                    plot_bar_rate_dual(mp, _wc, _sum_col, "플레이판수", "#E65100",
+                                       _awc, "1인 주평균", "#D32F2F",
+                                       "맞고(와플랫) 플레이판수 + 1인 주평균", bar_unit="판", line_unit="판")
+            if not df.empty:
+                dff = filter_by_week_range(df, "주차", p_start, p_end, weeks)
+                plot_municipality_lines(dff, "지자체별 플레이 판수", metric_label="판수")
         else:
             st.info("데이터 없음")
 
@@ -2460,95 +2560,67 @@ elif page == "😰 6.스트레스체크":
 
     with tab1:
         stress_users = data.get("weekly_스트레스이용자", pd.DataFrame())
-        if not stress_users.empty:
-            # C열(합계) 우선 사용
+        stress_user_raw = sheets.get("스트레스이용자", pd.DataFrame())
+        if not stress_user_raw.empty:
+            su = stress_user_raw.copy()
+            _wc, _sum_col, _rc = None, None, None
+            for c in su.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl and _wc is None: _wc = c
+                elif ("이용자합계" in cl or ("합계" in cl and "이용자" in cl)) and _sum_col is None: _sum_col = c
+                elif ("전체이용비중" in cl or "이용비중" in cl) and _rc is None: _rc = c
             stress_total_c = data.get("total_스트레스이용자", pd.DataFrame())
-            if not stress_total_c.empty:
-                st2 = filter_by_week_range(stress_total_c, "주차", p_start, p_end, weeks)
-                st2 = st2.rename(columns={"값": "이용자합계"})
-                plot_weekly_series(st2, "주차", "이용자합계", "스트레스체크 전체 이용자 추이", "#7B1FA2")
-            else:
-                sf = filter_by_week_range(stress_users, "주차", p_start, p_end, weeks)
-                total = sf.pipe(weekly_total)
-                total = total.rename(columns={"값": "이용자합계"})
-                plot_weekly_series(total, "주차", "이용자합계", "스트레스체크 전체 이용자 추이", "#7B1FA2")
-            sf = filter_by_week_range(stress_users, "주차", p_start, p_end, weeks)
-
-            # 전체이용비중
-            stress_user_raw = sheets.get("스트레스이용자", pd.DataFrame())
-            if not stress_user_raw.empty:
-                su = stress_user_raw.copy()
-                _wc, _rc = None, None
-                for c in su.columns:
-                    cl = str(c).replace("\n", "").strip()
-                    if "주차" in cl: _wc = c
-                    elif "전체이용비중" in cl or "이용비중" in cl: _rc = c
-                if _wc and _rc:
-                    su[_rc] = su[_rc].apply(safe_numeric)
-                    su = su[su[_wc].astype(str).str.strip() != "nan"]
-                    # 기간 필터 적용
-                    if p_start:
-                        su = filter_by_week_range(su, _wc, p_start, p_end, weeks)
-                    su = shorten_dates_in_df(su, _wc)
-                    fig_r = go.Figure()
-                    fig_r.add_trace(go.Scatter(x=su[_wc], y=su[_rc], mode="lines+markers",
-                        name="전체이용비중", line=dict(color="#4A148C", width=2),
-                        hovertemplate="%{y:.1f}%<extra>전체이용비중</extra>"))
-                    fig_r.update_layout(title="전체이용비중 (전체 회원 대비 이용자 %)", height=300,
-                        xaxis=dict(type="category"), yaxis=dict(title="%"),
-                        margin=dict(t=40, b=60, l=40, r=10), hovermode="x unified")
-                    st.plotly_chart(fig_r, use_container_width=True)
-
-            plot_municipality_lines(sf, "지자체별 스트레스체크 이용자 추이", metric_label="이용자수")
+            if _wc:
+                su = filter_by_week_range(su, _wc, p_start, p_end, weeks)
+                su = shorten_dates_in_df(su, _wc)
+                if not stress_total_c.empty:
+                    stt = filter_by_week_range(stress_total_c, "주차", p_start, p_end, weeks)
+                    stt = shorten_dates_in_df(stt, "주차")
+                    ct_map = dict(zip(stt["주차"], stt["값"].apply(safe_numeric)))
+                    su["_bar"] = su[_wc].map(ct_map).fillna(su[_sum_col].apply(safe_numeric) if _sum_col else 0)
+                    bar_col_use = "_bar"
+                else:
+                    bar_col_use = _sum_col
+                if bar_col_use:
+                    plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#7B1FA2",
+                                       _rc, "전체이용비중", "#4A148C",
+                                       "스트레스체크 이용자수 + 전체이용비중")
+            sf = filter_by_week_range(stress_users, "주차", p_start, p_end, weeks) if not stress_users.empty else pd.DataFrame()
+            if not sf.empty:
+                plot_municipality_lines(sf, "지자체별 스트레스체크 이용자 추이", metric_label="이용자수")
         else:
             st.info("스트레스체크 이용자 데이터가 없습니다.")
 
     with tab2:
         stress_count = data.get("weekly_스트레스수행횟수", pd.DataFrame())
-        if not stress_count.empty:
-            # C열(합계) 우선 사용
+        stress_exam_raw = sheets.get("스트레스수행횟수", pd.DataFrame())
+        if not stress_exam_raw.empty:
+            se = stress_exam_raw.copy()
+            _wc, _sum_col, _awc = None, None, None
+            for c in se.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl and _wc is None: _wc = c
+                elif "합계" in cl and _sum_col is None: _sum_col = c
+                elif "1인" in cl and "주평균" in cl and _awc is None: _awc = c
             stress_exam_total_c = data.get("total_스트레스수행횟수", pd.DataFrame())
-            if not stress_exam_total_c.empty:
-                set2 = filter_by_week_range(stress_exam_total_c, "주차", p_start, p_end, weeks)
-                set2 = set2.rename(columns={"값": "수행횟수합계"})
-                plot_weekly_series(set2, "주차", "수행횟수합계", "스트레스체크 수행횟수 추이", "#4A148C")
-            else:
-                sf2 = filter_by_week_range(stress_count, "주차", p_start, p_end, weeks)
-                total = sf2.pipe(weekly_total)
-                total = total.rename(columns={"값": "수행횟수합계"})
-                plot_weekly_series(total, "주차", "수행횟수합계", "스트레스체크 수행횟수 추이", "#4A148C")
-            sf = filter_by_week_range(stress_count, "주차", p_start, p_end, weeks)
-
-            # 1인 주평균 / 1인 일평균
-            stress_exam_raw = sheets.get("스트레스수행횟수", pd.DataFrame())
-            if not stress_exam_raw.empty:
-                se = stress_exam_raw.copy()
-                _wc, _awc, _adc = None, None, None
-                for c in se.columns:
-                    cl = str(c).replace("\n", "").strip()
-                    if "주차" in cl: _wc = c
-                    elif "1인" in cl and "주평균" in cl: _awc = c
-                    elif "1인" in cl and "일평균" in cl: _adc = c
-                if _wc and (_awc or _adc):
-                    se = se[se[_wc].astype(str).str.strip() != "nan"]
-                    fig_a = go.Figure()
-                    if _awc:
-                        se[_awc] = se[_awc].apply(safe_numeric)
-                        fig_a.add_trace(go.Scatter(x=se[_wc], y=se[_awc], mode="lines+markers",
-                            name="1인 주평균", line=dict(color="#6A1B9A", width=2),
-                            hovertemplate="%{y:.1f}회<extra>1인 주평균</extra>"))
-                    if _adc:
-                        se[_adc] = se[_adc].apply(safe_numeric)
-                        fig_a.add_trace(go.Scatter(x=se[_wc], y=se[_adc], mode="lines+markers",
-                            name="1인 일평균", line=dict(color="#FF6F00", width=2),
-                            hovertemplate="%{y:.2f}회<extra>1인 일평균</extra>"))
-                    fig_a.update_layout(title="1인당 평균 수행횟수", height=300,
-                        xaxis=dict(type="category"), yaxis=dict(title="횟수"),
-                        margin=dict(t=40, b=60, l=40, r=10), hovermode="x unified",
-                        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
-                    st.plotly_chart(fig_a, use_container_width=True)
-
-            plot_municipality_lines(sf, "지자체별 스트레스체크 수행횟수 추이", metric_label="수행횟수")
+            if _wc:
+                se = filter_by_week_range(se, _wc, p_start, p_end, weeks)
+                se = shorten_dates_in_df(se, _wc)
+                if not stress_exam_total_c.empty:
+                    sett = filter_by_week_range(stress_exam_total_c, "주차", p_start, p_end, weeks)
+                    sett = shorten_dates_in_df(sett, "주차")
+                    ct_map = dict(zip(sett["주차"], sett["값"].apply(safe_numeric)))
+                    se["_bar"] = se[_wc].map(ct_map).fillna(se[_sum_col].apply(safe_numeric) if _sum_col else 0)
+                    bar_col_use = "_bar"
+                else:
+                    bar_col_use = _sum_col
+                if bar_col_use:
+                    plot_bar_rate_dual(se, _wc, bar_col_use, "수행횟수", "#4A148C",
+                                       _awc, "1인 주평균", "#FF6F00",
+                                       "스트레스체크 수행횟수 + 1인 주평균", bar_unit="회", line_unit="회")
+            sf = filter_by_week_range(stress_count, "주차", p_start, p_end, weeks) if not stress_count.empty else pd.DataFrame()
+            if not sf.empty:
+                plot_municipality_lines(sf, "지자체별 스트레스체크 수행횟수 추이", metric_label="수행횟수")
         else:
             st.info("스트레스체크 수행횟수 데이터가 없습니다.")
 
@@ -2589,17 +2661,7 @@ elif page == "🤖 AI 생활지원사":
         existing_weeks = set(ai_chart["주차"].tolist())
         missing_weeks = [w for w in ["26-08", "26-09", "26-10"] if w not in existing_weeks]
 
-        # 지자체 구분 안내
-        st.markdown("""
-        <div class="insight-box">
-        📌 <b>데이터 구분</b><br>
-        • <b>~26-07주차</b>: 독거노인지원종합센터 (200명 대상)<br>
-        • <b>26-08~10주차</b>: 데이터 없음 (전환 기간)<br>
-        • <b>26-11주차~</b>: 삼척시청 (26~49명 대상)
-        </div>
-        """, unsafe_allow_html=True)
-
-        tab1, tab2, tab3, tab4 = st.tabs(["참여율 추이 (%)", "참여 인원 (명)", "월별 추이", "상세 데이터"])
+        tab5, tab1, tab2, tab3, tab4 = st.tabs(["🏛 지자체별 비교", "참여율 추이 (%)", "참여 인원 (명)", "월별 추이", "상세 데이터"])
 
         with tab1:
             # 인트로율 + 서비스율 + 프로그램 완료율
@@ -2740,6 +2802,170 @@ elif page == "🤖 AI 생활지원사":
 
         with tab4:
             st.dataframe(ai_df, use_container_width=True, height=400)
+
+        with tab5:
+            # ── 지자체별 비교 (신규 시트: gid=887906400) ──────────────────
+            MUN_COLORS = {
+                "삼척시청": "#1565C0",   # 파랑
+                "양양군청": "#2E7D32",   # 초록
+                "정선군청": "#E65100",   # 주황
+            }
+
+            ai_mun = data.get("ai_municipality", pd.DataFrame())
+
+            if ai_mun.empty:
+                st.info("지자체별 데이터가 없습니다. (gid=887906400)")
+            else:
+                mun_df    = ai_mun.copy()
+                agg_df    = mun_df[mun_df["지자체"] == "통합"].copy()   # 통합 행
+                mun_only  = mun_df[mun_df["지자체"] != "통합"].copy()   # 지자체별 행
+                periods   = mun_only["기간"].unique().tolist()
+                muns      = mun_only["지자체"].unique().tolist()
+
+                # ── 통합 추이 차트 ─────────────────────────────────────────
+                if not agg_df.empty:
+                    st.markdown("#### 📊 통합 주차별 참여율 추이")
+                    AGG_COLORS = {
+                        "intro(%)":            ("#212121", "인트로 참여율"),
+                        "service proposal(%)": ("#757575", "서비스 제안율"),
+                        "program(%)":          ("#BDBDBD", "프로그램 완료율"),
+                    }
+                    fig_agg = go.Figure()
+                    for m_col, (color, m_label) in AGG_COLORS.items():
+                        if m_col not in agg_df.columns:
+                            continue
+                        vals = agg_df[m_col].apply(safe_numeric)
+                        fig_agg.add_trace(go.Bar(
+                            x=agg_df["기간"], y=vals,
+                            name=m_label,
+                            marker_color=color,
+                            text=vals.apply(lambda v: f"{v:.0f}%" if v > 0 else ""),
+                            textposition="outside",
+                            textfont=dict(size=16),
+                            hovertemplate=f"<b>%{{x}}</b><br>{m_label}: <b>%{{y:.1f}}%</b><extra></extra>",
+                        ))
+                    fig_agg.update_layout(
+                        height=440,
+                        barmode="group",
+                        bargap=0.2,
+                        hovermode="x unified",
+                        xaxis=dict(type="category", title=""),
+                        yaxis=dict(title="참여율 (%)", range=[0, 110]),
+                        legend=LEGEND_BELOW,
+                        margin=dict(t=30, b=100),
+                    )
+                    st.plotly_chart(fig_agg, use_container_width=True)
+                    st.markdown("---")
+
+                # ── 최신 주차 요약 ──────────────────────────────────────────
+                latest_period = periods[-1] if periods else None
+                if latest_period:
+                    latest = mun_only[mun_only["기간"] == latest_period].copy()
+                    st.markdown(f"**{latest_period} 기준 지자체별 현황**")
+                    cols_kpi = st.columns(len(latest))
+                    for i, (_, row) in enumerate(latest.iterrows()):
+                        mun = row["지자체"]
+                        color = MUN_COLORS.get(mun, "#607D8B")
+                        day_str = f"({row['알람요일']})" if row.get("알람요일") else ""
+                        intro_pct = safe_numeric(row.get("intro(%)", 0))
+                        svc_pct   = safe_numeric(row.get("service proposal(%)", 0))
+                        prog_pct  = safe_numeric(row.get("program(%)", 0))
+                        alarm_user = int(safe_numeric(row.get("receiveAlarmUserCount", 0)))
+                        with cols_kpi[i]:
+                            st.markdown(
+                                f"""<div style="background:{color};border-radius:12px;padding:1rem;color:white;text-align:center">
+                                <b style="font-size:1rem">{mun}{day_str}</b><br>
+                                <span style="font-size:0.8rem;opacity:0.85">알람도달 {alarm_user}명</span><br>
+                                <span style="font-size:1.5rem;font-weight:700">{intro_pct:.0f}%</span><br>
+                                <span style="font-size:0.75rem">인트로 참여율</span><br>
+                                <span style="font-size:0.85rem">서비스 {svc_pct:.0f}% | 프로그램 {prog_pct:.0f}%</span>
+                                </div>""",
+                                unsafe_allow_html=True
+                            )
+
+                st.markdown("---")
+
+                # ── 주차별 참여율 추이: 지자체×지표 명도별 그룹 막대 (단일 차트) ──
+                # 지자체별 3단계 명도: 인트로(진) / 서비스(중) / 프로그램(연)
+                MUN_SHADES = {
+                    "삼척시청": {
+                        "intro(%)":            "#1565C0",   # 진파랑
+                        "service proposal(%)": "#42A5F5",   # 중파랑
+                        "program(%)":          "#90CAF9",   # 연파랑
+                    },
+                    "양양군청": {
+                        "intro(%)":            "#1B5E20",   # 진초록
+                        "service proposal(%)": "#43A047",   # 중초록
+                        "program(%)":          "#A5D6A7",   # 연초록
+                    },
+                    "정선군청": {
+                        "intro(%)":            "#BF360C",   # 진주황
+                        "service proposal(%)": "#F4511E",   # 중주황
+                        "program(%)":          "#FFAB91",   # 연주황
+                    },
+                }
+                DEFAULT_SHADES = {
+                    "intro(%)": "#607D8B",
+                    "service proposal(%)": "#90A4AE",
+                    "program(%)": "#CFD8DC",
+                }
+                METRIC_DEF = [
+                    ("intro(%)",            "인트로 참여율"),
+                    ("service proposal(%)", "서비스 제안율"),
+                    ("program(%)",          "프로그램 완료율"),
+                ]
+
+                fig_all = go.Figure()
+                for mun in muns:
+                    sub = mun_only[mun_only["지자체"] == mun].copy()
+                    if sub.empty:
+                        continue
+                    alarm_day = sub["알람요일"].iloc[0] if "알람요일" in sub.columns else ""
+                    mun_label = f"{mun}({alarm_day})" if alarm_day else mun
+                    shades = MUN_SHADES.get(mun, DEFAULT_SHADES)
+
+                    for m_col, m_label in METRIC_DEF:
+                        vals = sub[m_col].apply(safe_numeric) if m_col in sub.columns else pd.Series([0]*len(sub))
+                        color = shades.get(m_col, "#607D8B")
+                        fig_all.add_trace(go.Bar(
+                            x=sub["기간"],
+                            y=vals,
+                            name=f"{mun_label} {m_label}",
+                            legendgroup=mun,
+                            legendgrouptitle_text=mun_label,
+                            marker_color=color,
+                            text=vals.apply(lambda v: f"{v:.0f}%" if v > 0 else ""),
+                            textposition="outside",
+                            textfont=dict(size=16),
+                            hovertemplate=(
+                                f"<b>%{{x}}</b><br>"
+                                f"{mun_label}<br>"
+                                f"{m_label}: <b>%{{y:.1f}}%</b><extra></extra>"
+                            ),
+                        ))
+
+                fig_all.update_layout(
+                    title="주차별 참여율 비교 — 지자체별 색상 / 진→연: 인트로·서비스·프로그램",
+                    height=500,
+                    barmode="group",
+                    bargap=0.15,
+                    bargroupgap=0.05,
+                    hovermode="x unified",
+                    xaxis=dict(type="category", title=""),
+                    yaxis=dict(title="참여율 (%)", range=[0, 110]),
+                    legend=dict(
+                        orientation="h", yanchor="top", y=-0.25,
+                        xanchor="center", x=0.5, font=dict(size=8),
+                        groupclick="toggleitem",
+                    ),
+                    margin=dict(t=50, b=120),
+                )
+                st.plotly_chart(fig_all, use_container_width=True)
+
+                # ── 상세 데이터 표 ─────────────────────────────────────────
+                with st.expander("상세 데이터 보기"):
+                    st.dataframe(mun_df, use_container_width=True, height=350)
+
     else:
         st.info("AI 생활지원사 데이터가 없습니다.")
 
@@ -2777,18 +3003,30 @@ elif page == "🩺 8.건강상담":
         tab1, tab2 = st.tabs(["이용 추이", "상세 데이터"])
 
         with tab1:
-            if week_col and "실제 이용 건수" in health_df.columns:
-                plot_weekly_series(health_df, week_col, "실제 이용 건수", "건강상담 실제 이용 건수 추이", "#00897B")
+            if week_col:
+                health_chart = shorten_dates_in_df(health_df, week_col)
+            else:
+                health_chart = health_df.copy()
 
-            if week_col and "전화버튼클릭건수" in health_df.columns:
+            # 이용 건수(막대) + 전체이용비중(꺾은선) 이중축
+            if week_col and "실제 이용 건수" in health_chart.columns:
+                plot_bar_rate_dual(
+                    health_chart, week_col,
+                    bar_col="실제 이용 건수",   bar_label="실제 이용 건수", bar_color="#00897B",
+                    line_col="전체이용비중",    line_label="전체 이용비중", line_color="#E91E63",
+                    title="건강상담 이용 건수 & 전체 이용비중",
+                    bar_unit="건", line_unit="%",
+                )
+
+            if week_col and "전화버튼클릭건수" in health_chart.columns:
                 fig = go.Figure()
-                if "메뉴클릭건수" in health_df.columns:
-                    fig.add_trace(go.Scatter(x=health_df[week_col], y=health_df["메뉴클릭건수"],
+                if "메뉴클릭건수" in health_chart.columns:
+                    fig.add_trace(go.Scatter(x=health_chart[week_col], y=health_chart["메뉴클릭건수"],
                                              name="메뉴클릭", mode="lines+markers", line=dict(color="#2196F3")))
-                fig.add_trace(go.Scatter(x=health_df[week_col], y=health_df["전화버튼클릭건수"],
+                fig.add_trace(go.Scatter(x=health_chart[week_col], y=health_chart["전화버튼클릭건수"],
                                          name="전화버튼클릭", mode="lines+markers", line=dict(color="#FF6F00")))
-                if "아웃바운드 성공건수" in health_df.columns:
-                    fig.add_trace(go.Scatter(x=health_df[week_col], y=health_df["아웃바운드 성공건수"],
+                if "아웃바운드\n성공건수" in health_chart.columns:
+                    fig.add_trace(go.Scatter(x=health_chart[week_col], y=health_chart["아웃바운드\n성공건수"],
                                              name="아웃바운드 성공", mode="lines+markers", line=dict(color="#00C853")))
                 fig.update_layout(title="건강상담 클릭/통화 추이", height=350,
                                   hovermode="x unified", xaxis=dict(type="category"),
@@ -2831,41 +3069,36 @@ elif page == "💬 9.생활상담":
         tab1, tab2 = st.tabs(["이용 추이", "상세 데이터"])
 
         with tab1:
-            if week_col and num_cols:
+            if week_col:
                 life_chart = shorten_dates_in_df(life_df, week_col)
 
-                # 메뉴 클릭 관련 컬럼
-                click_cols = [c for c in num_cols if "클릭건수" in str(c) or "클릭자수" in str(c)]
-                # 전화버튼 관련 컬럼
-                phone_cols = [c for c in num_cols if "전화" in str(c)]
-                # 기타 (비중 등)
-                other_cols = [c for c in num_cols if c not in click_cols and c not in phone_cols]
+                # 차트1: 메뉴클릭건수(막대) + 전체이용비중(꺾은선) — 건강상담과 동일 양식
+                if "메뉴클릭건수" in life_chart.columns:
+                    plot_bar_rate_dual(
+                        life_chart, week_col,
+                        bar_col="메뉴클릭건수",  bar_label="메뉴클릭건수", bar_color="#5D4037",
+                        line_col="전체이용비중", line_label="전체 이용비중", line_color="#E91E63",
+                        title="생활상담 메뉴클릭건수 & 전체 이용비중",
+                        bar_unit="건", line_unit="%",
+                    )
 
-                # 차트1: 메뉴클릭 + 기타
-                main_cols = other_cols + [c for c in click_cols if "전화" not in str(c)]
-                if main_cols:
-                    fig = go.Figure()
-                    colors = ["#5D4037", "#FF6F00", "#2196F3", "#00C853", "#9C27B0"]
-                    for i, c in enumerate(main_cols):
-                        fig.add_trace(go.Scatter(x=life_chart[week_col], y=life_chart[c],
-                                                 name=c, mode="lines+markers",
-                                                 line=dict(color=colors[i % len(colors)])))
-                    fig.update_layout(title="생활상담 주요 지표 추이", height=350,
-                                      hovermode="x unified", xaxis=dict(type="category"),
-                                      legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                # 차트2: 전화버튼 클릭 지표
+                # 차트2: 전화버튼 클릭자수 — 건강상담과 동일 양식
+                phone_cols = [c for c in life_chart.columns
+                              if "전화" in str(c) and c != "전체이용비중"]
                 if phone_cols:
                     fig2 = go.Figure()
                     phone_colors = ["#D32F2F", "#E57373", "#FF8A65"]
                     for i, c in enumerate(phone_cols):
-                        fig2.add_trace(go.Scatter(x=life_chart[week_col], y=life_chart[c],
-                                                  name=c, mode="lines+markers",
-                                                  line=dict(color=phone_colors[i % len(phone_colors)])))
-                    fig2.update_layout(title="📞 전화버튼 클릭자수 추이", height=320,
-                                       hovermode="x unified", xaxis=dict(type="category"),
-                                       legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
+                        fig2.add_trace(go.Scatter(
+                            x=life_chart[week_col], y=life_chart[c],
+                            name=c, mode="lines+markers",
+                            line=dict(color=phone_colors[i % len(phone_colors)])
+                        ))
+                    fig2.update_layout(
+                        title="📞 전화버튼 클릭자수 추이", height=320,
+                        hovermode="x unified", xaxis=dict(type="category"),
+                        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
+                    )
                     st.plotly_chart(fig2, use_container_width=True)
 
         with tab2:
@@ -2881,10 +3114,10 @@ elif page == "📝 자동 보고서":
     st.markdown('<div class="section-header">📝 자동 생성 주간 운영 보고서</div>', unsafe_allow_html=True)
 
     if selected_week:
-        summary = get_week_summary(sheets, data, selected_week)
+        summary = cached_week_summary(sheets, data, selected_week)
         prev_week = get_prev_week(selected_week)
-        prev_summary = get_week_summary(sheets, data, prev_week) if prev_week else {}
-        heatmap_df = build_municipality_heatmap_data(data, selected_week)
+        prev_summary = cached_week_summary(sheets, data, prev_week) if prev_week else {}
+        heatmap_df = cached_heatmap(data, selected_week)
 
         # 4주 트렌드 데이터 수집
         week_idx = weeks.index(selected_week) if selected_week in weeks else -1
@@ -2893,7 +3126,7 @@ elif page == "📝 자동 보고서":
             idx = week_idx - i
             if idx >= 0:
                 w = weeks[idx]
-                s = get_week_summary(sheets, data, w)
+                s = cached_week_summary(sheets, data, w)
                 trend_4w.append({"주차": w, **s})
         trend_4w.reverse()
 

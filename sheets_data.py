@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Google Sheets 실데이터 fetcher - 와플랫 공공 지표 대시보드"""
 import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 import requests
 
@@ -30,6 +31,7 @@ SHEET_GIDS = {
     "스트레스수행횟수": "2115071221",
     "AI생활지원사":     "1751859498",
     "AI생활지원사월별": "552264832",
+    "AI생활지원사신규": "887906400",
     "안부확인raw":      "1323180805",
     "안부체크off":      "1043653372",
 }
@@ -100,10 +102,20 @@ def fetch_sheet(gid: str) -> pd.DataFrame:
 
 
 def fetch_all_sheets() -> dict:
-    """모든 시트 데이터를 한 번에 가져오기"""
+    """모든 시트 데이터를 병렬로 한 번에 가져오기 (ThreadPoolExecutor)"""
     data = {}
-    for name, gid in SHEET_GIDS.items():
-        data[name] = fetch_sheet(gid)
+
+    def _fetch_one(name_gid):
+        name, gid = name_gid
+        return name, fetch_sheet(gid)
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        futures = {executor.submit(_fetch_one, item): item[0]
+                   for item in SHEET_GIDS.items()}
+        for future in as_completed(futures):
+            name, df = future.result()
+            data[name] = df
+
     return data
 
 
@@ -540,6 +552,55 @@ def get_ai_funnel(sheets: dict) -> pd.DataFrame:
     return df
 
 
+def get_ai_municipality_data(sheets: dict) -> pd.DataFrame:
+    """AI생활지원사 신규 시트(gid=887906400): 지자체별 주차 데이터
+
+    시트 구조:
+      - 구분: 주차 기간(예: '4월 5일~11일') — 통합 행에만 값, 이하 NaN
+      - Unnamed: 1: 지자체명('통합' 또는 '삼척시청'/'양양군청'/'정선군청')
+      - 계약인원, 가입인원, 알람요일
+      - receiveAlarmCount, receiveAlarmUserCount
+      - intro, intro(%): 인트로 수/율
+      - service proposal(%): 서비스 제안율
+      - program(%): 프로그램 완료율
+
+    반환: 지자체별 행만 포함 (통합 제외), 기간 컬럼 forward-fill
+    """
+    df = sheets.get("AI생활지원사신규", pd.DataFrame())
+    if df.empty:
+        return pd.DataFrame()
+    df = df.copy()
+
+    # 구분 컬럼 forward-fill (기간명이 통합 행에만 있음)
+    period_col = df.columns[0]   # '구분'
+    name_col   = df.columns[1]   # 'Unnamed: 1' → 지자체명
+
+    df[period_col] = df[period_col].ffill()
+
+    # 수치 컬럼 정리
+    num_cols = ["계약인원", "가입인원", "receiveAlarmCount", "receiveAlarmUserCount",
+                "intro", "intro(%)", "service proposal(%)", "program(%)"]
+
+    result_rows = []
+    for _, row in df.iterrows():
+        name = str(row.get(name_col, "")).strip()
+        if name in ("nan", "", "NaN"):
+            continue
+        period = str(row.get(period_col, "")).strip()
+        alarm_day = str(row.get("알람요일", "")).strip()
+        alarm_day = "" if alarm_day in ("nan", "NaN") else alarm_day
+
+        r = {"기간": period, "지자체": name, "알람요일": alarm_day}
+        for nc in num_cols:
+            if nc in df.columns:
+                r[nc] = safe_numeric(row.get(nc, 0))
+        result_rows.append(r)
+
+    if not result_rows:
+        return pd.DataFrame()
+    return pd.DataFrame(result_rows)
+
+
 def get_app_deletion_data(sheets: dict) -> pd.DataFrame:
     """시트3: 심혈관현황 시트에서 앱삭제율 데이터 추출"""
     df = sheets.get("심혈관현황", pd.DataFrame())
@@ -740,9 +801,10 @@ def build_dashboard_data(sheets: dict) -> dict:
     # 5. 앱삭제율
     result["app_deletion"] = get_app_deletion_data(sheets)
 
-    # 6. AI 생활지원사 funnel + 월별 추이
+    # 6. AI 생활지원사 funnel + 월별 추이 + 지자체별
     result["ai_funnel"] = get_ai_funnel(sheets)
     result["ai_monthly"] = get_ai_monthly(sheets)
+    result["ai_municipality"] = get_ai_municipality_data(sheets)
 
     # 6-1. 심혈관/스트레스 C열(합계) 직접 추출
     for _sheet_key, _result_key in [
@@ -861,12 +923,17 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
             summary["주간활성사용자"] = safe_numeric(row.get("주간활성사용자", 0))
             summary["주간이탈자"] = safe_numeric(row.get("주간이탈자", 0))
 
-    # 안부체크 일별 데이터에서 최신 안부체크율
+    # 안부체크 일별 데이터에서 최근 7일 평균 안부체크율
     cd = data.get("checkin_daily", pd.DataFrame())
     if not cd.empty and "안부체크율" in cd.columns:
+        # 0 제외 후 최근 7일 평균
+        cd_valid = cd[cd["안부체크율"].apply(safe_numeric) > 0].copy()
+        if not cd_valid.empty:
+            recent7 = cd_valid.tail(7)
+            avg_rate = round(recent7["안부체크율"].apply(safe_numeric).mean(), 1)
+            summary["안부체크율"] = avg_rate
         latest = cd.iloc[-1] if len(cd) > 0 else None
         if latest is not None:
-            summary["안부체크율"] = safe_numeric(latest.get("안부체크율", 0))
             summary["전체회원"] = safe_numeric(latest.get("전체회원", 0))
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
 
