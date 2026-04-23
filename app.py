@@ -1374,8 +1374,7 @@ elif page == "🖐 2.안부확인":
                 )
                 st.plotly_chart(fig_cr, use_container_width=True)
 
-            # 지자체별 안부확인율 (주간 Google Sheets 데이터)
-            st.markdown("**지자체별 안부확인율 추이 (주간)**")
+            # 지자체별 안부확인율 (주간 Google Sheets 데이터) — 바로 아래 연결
             cr_mun = data.get("checkin_municipality_rate", pd.DataFrame())
             if not cr_mun.empty and "안부확인율" in cr_mun.columns:
                 cr_show = cr_mun[cr_mun["안부확인율"].notna() & (cr_mun["안부확인율"] > 0)].copy()
@@ -1550,41 +1549,35 @@ elif page == "🖐 2.안부확인":
 
     else:
         # DB 데이터 없으면 Google Sheets 데이터 사용 (기존 방식)
-        cd = data.get("checkin_daily", pd.DataFrame())
-        if not cd.empty:
-            tab1, tab2 = st.tabs(["안부확인율 추이", "지자체별 안부확인율"])
-            with tab1:
-                cr_mun2 = data.get("checkin_municipality_rate", pd.DataFrame())
-                if not cr_mun2.empty and "안부확인율" in cr_mun2.columns:
-                    cr2 = cr_mun2[cr_mun2["안부확인율"].notna() & (cr_mun2["안부확인율"] > 0)].copy()
-                    cr2 = shorten_dates_in_df(cr2, "시작일")
-                    if not cr2.empty:
-                        # 전체 평균 추이
-                        avg_cr = cr2.groupby("시작일")["안부확인율"].mean().reset_index()
-                        fig = px.line(avg_cr, x="시작일", y="안부확인율", markers=True,
-                                      color_discrete_sequence=["#2F5496"])
-                        fig.update_layout(title="전체 평균 안부확인율 추이", height=350,
-                                          hovermode="x unified", xaxis=dict(type="category"),
-                                          yaxis=dict(range=[0, 100]))
-                        st.plotly_chart(fig, use_container_width=True)
-            with tab2:
-                cr_mun3 = data.get("checkin_municipality_rate", pd.DataFrame())
-                if not cr_mun3.empty and "안부확인율" in cr_mun3.columns:
-                    cr3 = cr_mun3[cr_mun3["안부확인율"].notna() & (cr_mun3["안부확인율"] > 0)].copy()
-                    cr3 = shorten_dates_in_df(cr3, "시작일")
-                    if not cr3.empty:
-                        fig2 = px.line(cr3, x="시작일", y="안부확인율", color="지자체명",
-                                       markers=True,
-                                       color_discrete_sequence=px.colors.qualitative.Set2)
-                        fig2.update_layout(title="지자체별 안부확인율 추이", height=420,
-                                           hovermode="x unified", xaxis=dict(type="category"),
-                                           yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
-                                           legend=LEGEND_BELOW, margin=dict(t=40, b=80))
-                        st.plotly_chart(fig2, use_container_width=True)
-                    else:
-                        st.info("안부확인율 데이터가 없습니다.")
-                else:
-                    st.info("지자체별 안부확인율 데이터가 없습니다.")
+        cr_base = data.get("checkin_municipality_rate", pd.DataFrame())
+        if not cr_base.empty and "안부확인율" in cr_base.columns:
+            cr_all = cr_base[cr_base["안부확인율"].notna() & (cr_base["안부확인율"] > 0)].copy()
+            cr_all = shorten_dates_in_df(cr_all, "시작일")
+            if not cr_all.empty:
+                # ① 전체 평균 추이
+                avg_cr = cr_all.groupby("시작일")["안부확인율"].mean().reset_index()
+                fig = px.line(avg_cr, x="시작일", y="안부확인율", markers=True,
+                              color_discrete_sequence=["#2F5496"])
+                fig.update_layout(title="안부확인율 추이 (전체 평균)", height=350,
+                                  hovermode="x unified", xaxis=dict(type="category"),
+                                  yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
+                                  margin=dict(t=40, b=30))
+                st.plotly_chart(fig, use_container_width=True)
+
+                # ② 지자체별 추이 (바로 아래)
+                fig2 = px.line(cr_all, x="시작일", y="안부확인율", color="지자체명",
+                               markers=True,
+                               color_discrete_sequence=px.colors.qualitative.Set2)
+                fig2.update_layout(title="지자체별 안부확인율 추이", height=420,
+                                   hovermode="x unified", xaxis=dict(type="category"),
+                                   yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
+                                   legend=LEGEND_BELOW, margin=dict(t=40, b=80))
+                fig2.update_traces(
+                    hovertemplate="<b>%{x}</b><br>%{y:.1f}%<extra>%{fullData.name}</extra>"
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.info("안부확인율 데이터가 없습니다.")
         else:
             st.info("안부확인 데이터가 없습니다. '📥 데이터 입력'에서 safetyCheck 데이터를 붙여넣어주세요.")
 
