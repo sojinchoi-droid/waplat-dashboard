@@ -949,34 +949,6 @@ if page == "📋 Summary":
                         return True
                 return False
             heatmap_df = heatmap_df[heatmap_df["지자체명"].apply(_is_active_fuzzy)]
-        if not heatmap_df.empty:
-            # 액션 리스트
-            st.markdown('<div class="section-header">이번 주 액션 리스트</div>', unsafe_allow_html=True)
-
-            focus = heatmap_df[heatmap_df["종합상태"] == "집중관리"]
-            caution = heatmap_df[heatmap_df["종합상태"] == "주의관리"]
-            excellent = heatmap_df[heatmap_df["종합상태"] == "우수사례"]
-
-            if not focus.empty:
-                for _, r in focus.iterrows():
-                    issues = []
-                    if r.get("가입완료율", 0) < 50:
-                        issues.append(f"가입율 {r['가입완료율']:.0f}%")
-                    if r.get("앱삭제율", 0) >= 15:
-                        issues.append(f"앱삭제율 {r['앱삭제율']:.1f}%")
-                    issue_txt = ", ".join(issues) if issues else "복수 지표 부진"
-                    st.markdown(f'<div class="insight-box-danger">🔴 <b>{r["지자체명"]}</b>: {issue_txt} → 즉시 담당자 연락 권장</div>', unsafe_allow_html=True)
-
-            if not caution.empty:
-                for _, r in caution.iterrows():
-                    st.markdown(f'<div class="insight-box">🟡 <b>{r["지자체명"]}</b>: 모니터링 강화 필요 (가입율 {r.get("가입완료율", 0):.0f}%, 삭제율 {r.get("앱삭제율", 0):.1f}%)</div>', unsafe_allow_html=True)
-
-            if not excellent.empty:
-                names = ", ".join(excellent["지자체명"].tolist())
-                st.markdown(f'<div class="insight-box-success">⭐ <b>우수사례</b>: {names}</div>', unsafe_allow_html=True)
-
-            if focus.empty and caution.empty:
-                st.markdown('<div class="insight-box-success">✅ 모든 지자체 정상 범위 내 운영 중</div>', unsafe_allow_html=True)
     else:
         st.info("사이드바에서 주차를 선택해주세요.")
 
