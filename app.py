@@ -2923,12 +2923,20 @@ elif page == "🤖 AI 생활지원사":
                     ("program(%)",          "프로그램 완료율"),
                 ]
 
-                # ── 지자체별 개별 그래프 ────────────────────────────────────
+                # ── 지자체별 개별 그래프 (x축 기간 공통 고정) ──────────────
+                # 전체 기간 목록을 원래 순서대로 확정 → 모든 차트가 같은 x 눈금 사용
+                all_periods = list(dict.fromkeys(mun_only["기간"].tolist()))  # 순서 보존 중복 제거
+
                 for mun in muns:
                     sub = mun_only[mun_only["지자체"] == mun].copy()
                     if sub.empty:
                         continue
-                    alarm_day = sub["알람요일"].iloc[0] if "알람요일" in sub.columns else ""
+                    # 전체 기간 기준으로 reindex (없는 주차는 0)
+                    sub = sub.set_index("기간").reindex(all_periods).reset_index()
+                    sub["기간"] = pd.Categorical(sub["기간"], categories=all_periods, ordered=True)
+
+                    alarm_day = mun_only[mun_only["지자체"] == mun]["알람요일"].iloc[0] \
+                                if "알람요일" in mun_only.columns else ""
                     mun_label = f"{mun} ({alarm_day})" if alarm_day else mun
                     color_base = MUN_COLORS.get(mun, "#607D8B")
                     shades = MUN_SHADES.get(mun, DEFAULT_SHADES)
@@ -2942,7 +2950,7 @@ elif page == "🤖 AI 생활지원사":
                             y=vals,
                             name=m_label,
                             marker_color=color,
-                            text=vals.apply(lambda v: f"{v:.0f}%" if v > 0 else ""),
+                            text=vals.apply(lambda v: f"{v:.0f}%" if pd.notna(v) and v > 0 else ""),
                             textposition="outside",
                             textfont=dict(size=15),
                             hovertemplate=f"<b>%{{x}}</b><br>{m_label}: <b>%{{y:.1f}}%</b><extra></extra>",
@@ -2953,7 +2961,12 @@ elif page == "🤖 AI 생활지원사":
                         barmode="group",
                         bargap=0.2,
                         hovermode="x unified",
-                        xaxis=dict(type="category", title=""),
+                        xaxis=dict(
+                            type="category",
+                            categoryorder="array",
+                            categoryarray=all_periods,  # 모든 차트 동일 x축
+                            title="",
+                        ),
                         yaxis=dict(title="참여율 (%)", range=[0, 115]),
                         legend=dict(orientation="h", yanchor="top", y=-0.18,
                                     xanchor="center", x=0.5),
