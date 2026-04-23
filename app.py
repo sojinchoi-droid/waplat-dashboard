@@ -2828,6 +2828,56 @@ elif page == "🤖 AI 생활지원사":
                 periods   = mun_only["기간"].unique().tolist()
                 muns      = mun_only["지자체"].unique().tolist()
 
+                # ── 지자체 계약 정보 카드 ──────────────────────────────────
+                st.markdown("#### 📋 지자체 계약 현황")
+                # 각 지자체의 최초 등장 기간(계약 시작 주차)과 알람 요일 추출
+                mun_info = (
+                    mun_only.groupby("지자체", sort=False)
+                    .agg(
+                        계약시작주차=("기간", "first"),
+                        알람요일=("알람요일", "first"),
+                        계약인원=("계약인원", "last"),
+                        가입인원=("가입인원", "last"),
+                    )
+                    .reset_index()
+                )
+                info_cols = st.columns(len(mun_info))
+                for i, (_, row) in enumerate(mun_info.iterrows()):
+                    mun = row["지자체"]
+                    color = MUN_COLORS.get(mun, "#607D8B")
+                    alarm = row["알람요일"] or "미정"
+                    start_week = row["계약시작주차"] or "-"
+                    contract_cnt = int(safe_numeric(row.get("계약인원", 0)))
+                    join_cnt = int(safe_numeric(row.get("가입인원", 0)))
+                    join_rate = round(join_cnt / contract_cnt * 100, 1) if contract_cnt > 0 else 0
+                    with info_cols[i]:
+                        st.markdown(
+                            f"""<div style="background:{color};border-radius:14px;
+                                padding:1.1rem 1.2rem;color:white;text-align:center;
+                                margin-bottom:0.6rem">
+                              <div style="font-size:1.1rem;font-weight:700;margin-bottom:0.4rem">
+                                🏛 {mun}
+                              </div>
+                              <div style="font-size:0.82rem;opacity:0.9;margin-bottom:0.5rem;
+                                          background:rgba(255,255,255,0.18);border-radius:8px;
+                                          padding:0.35rem 0.5rem">
+                                📅 계약 시작: <b>{start_week}</b>
+                              </div>
+                              <div style="font-size:0.82rem;opacity:0.9;margin-bottom:0.5rem;
+                                          background:rgba(255,255,255,0.18);border-radius:8px;
+                                          padding:0.35rem 0.5rem">
+                                🔔 알람 요일: <b>{alarm}</b>
+                              </div>
+                              <div style="font-size:0.82rem;opacity:0.9;
+                                          background:rgba(255,255,255,0.18);border-radius:8px;
+                                          padding:0.35rem 0.5rem">
+                                👥 계약 {contract_cnt:,}명 → 가입 {join_cnt:,}명 ({join_rate:.0f}%)
+                              </div>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+                st.markdown("---")
+
                 # ── 통합 추이 차트 ─────────────────────────────────────────
                 if not agg_df.empty:
                     st.markdown("#### 📊 통합 주차별 참여율 추이")
