@@ -290,8 +290,8 @@ with st.sidebar:
             "💊 7.복약관리",
             "🩺 8.건강상담",
             "💬 9.생활상담",
-            "🎮 10.맞고(와플랫+게스트)",
-            "🃏 11.맞고(와플랫)",
+            "🃏 10.맞고(와플랫)",
+            "🎮 11.맞고(와플랫+게스트)",
             "👤 12.맞고(게스트)",
             "🤖 AI 생활지원사",
             "📝 자동 보고서",
@@ -950,99 +950,6 @@ if page == "📋 Summary":
                 return False
             heatmap_df = heatmap_df[heatmap_df["지자체명"].apply(_is_active_fuzzy)]
         if not heatmap_df.empty:
-            st.markdown('<div class="section-header">지자체 x 지표 히트맵</div>', unsafe_allow_html=True)
-
-            # 상태 분포
-            status_counts = heatmap_df["종합상태"].value_counts()
-            scols = st.columns(4)
-            for col, (status, color) in zip(scols, [
-                ("집중관리", "#FF4B4B"), ("주의관리", "#FFA500"),
-                ("정상", "#9E9E9E"), ("우수사례", "#00C853")
-            ]):
-                count = status_counts.get(status, 0)
-                with col:
-                    st.markdown(f"""
-                    <div style="text-align:center; padding:8px; border-radius:12px;
-                                background:{color}22; border:2px solid {color};">
-                        <span style="font-size:1.5rem; font-weight:700; color:{color};">{count}</span>
-                        <br><span style="font-size:0.8rem; color:#555;">{status}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("")
-
-            # Plotly 히트맵
-            metrics = ["가입완료율", "앱삭제율", "심혈관이용률", "스트레스이용률", "맞고이용률"]
-            available_metrics = [m for m in metrics if m in heatmap_df.columns]
-            if available_metrics:
-                hm_data = heatmap_df[["지자체명", "종합상태"] + available_metrics].copy()
-                hm_data = hm_data.sort_values("종합상태", key=lambda x: x.map(
-                    {"집중관리": 0, "주의관리": 1, "정상": 2, "우수사례": 3}
-                ))
-
-                display_names = {
-                    "가입완료율": "가입완료율(%)",
-                    "앱삭제율": "앱삭제율(%)",
-                    "심혈관이용률": "심혈관(%)",
-                    "맞고이용률": "맞고(%)",
-                }
-
-                # 앱삭제율은 낮을수록 좋음 → 값 반전 (100 - 삭제율)하여 색상 통일
-                z_values = hm_data[available_metrics].values.copy()
-                z_display = hm_data[available_metrics].values.copy()  # 원본 (표시용)
-
-                # 앱삭제율 컬럼 인덱스 찾기
-                delete_idx = None
-                for i, m in enumerate(available_metrics):
-                    if "삭제" in m:
-                        delete_idx = i
-                        break
-
-                # 앱삭제율은 반전 (낮을수록 초록 → 높을수록 빨강)
-                if delete_idx is not None:
-                    z_values[:, delete_idx] = 100 - z_values[:, delete_idx]
-
-                # 각 셀에 원본 수치 표시
-                text_values = []
-                for row_idx in range(len(hm_data)):
-                    text_row = []
-                    for col_idx, m in enumerate(available_metrics):
-                        v = z_display[row_idx][col_idx]
-                        text_row.append(f"{v:.1f}%")
-                    text_values.append(text_row)
-
-                y_labels = [f"{row['지자체명']} ({row['종합상태']})" for _, row in hm_data.iterrows()]
-
-                fig = go.Figure(data=go.Heatmap(
-                    z=z_values,
-                    x=[display_names.get(m, m) for m in available_metrics],
-                    y=y_labels,
-                    text=text_values,
-                    texttemplate="%{text}",
-                    textfont=dict(size=11, color="black"),
-                    colorscale=[
-                        [0, "#FFCDD2"],
-                        [0.3, "#FFF9C4"],
-                        [0.6, "#C8E6C9"],
-                        [1, "#2E7D32"],
-                    ],
-                    hovertemplate="<b>%{y}</b><br>%{x}: %{text}<extra></extra>",
-                    showscale=True,
-                    colorbar=dict(title="성과", thickness=15,
-                                  ticktext=["나쁨", "보통", "좋음"],
-                                  tickvals=[10, 50, 90]),
-                    zmin=0,
-                    zmax=100,
-                ))
-                fig.update_layout(
-                    height=max(500, len(hm_data) * 32),
-                    margin=dict(t=10, b=10, l=10, r=10),
-                    yaxis=dict(autorange="reversed"),
-                    font=dict(size=11),
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                st.caption("※ 앱삭제율은 낮을수록 좋음 (초록=삭제율 낮음, 빨강=삭제율 높음)")
-
             # 액션 리스트
             st.markdown('<div class="section-header">이번 주 액션 리스트</div>', unsafe_allow_html=True)
 
@@ -1395,7 +1302,7 @@ elif page == "🖐 2.안부확인":
         st.caption(f"데이터 기간: {daily['date'].min()} ~ {daily['date'].max()}")
 
         tab1, tab2, tab3, tab4, tab5, tab7, tab8 = st.tabs([
-            "완료현황", "안부확인 비중", "안부체크 응답",
+            "완료현황", "안부확인 비중", "안부확인율",
             "AI케어 알람", "안부확인콜",
             "📊 일자별 데이터", "📊 지자체별 데이터"
         ])
@@ -1442,32 +1349,58 @@ elif page == "🖐 2.안부확인":
                               legend=LEGEND_BELOW)
             st.plotly_chart(fig, use_container_width=True)
 
-        # ── Tab 3: 일별 안부체크 응답률 + 안부체크율(OFF 제외, AB열)
+        # ── Tab 3: 일별 안부확인율 + 지자체별 안부확인율 (주간)
         with tab3:
-            # 안부체크율 (AB열, OFF 제외) — Google Sheets gid=261480368
-            if "안부체크율" in daily.columns and daily["안부체크율"].sum() > 0:
-                fig_ab = go.Figure()
-                fig_ab.add_trace(go.Scatter(
-                    x=daily["date"], y=daily["안부체크율"],
-                    mode="lines", name="안부체크율(OFF 제외)",
-                    line=dict(color="#FF6F00", width=2.5),
-                    hovertemplate="<b>%{x}</b><br>안부체크율: %{y:.1f}%<extra>OFF 제외</extra>"
+            # 일별 안부확인율 = complete_user_count / target_user_count × 100
+            if "complete_user_count" in daily.columns and "target_user_count" in daily.columns:
+                daily["안부확인율"] = (
+                    daily["complete_user_count"]
+                    / daily["target_user_count"].replace(0, float("nan")) * 100
+                ).round(1).fillna(0)
+                fig_cr = go.Figure()
+                fig_cr.add_trace(go.Scatter(
+                    x=daily["date"], y=daily["안부확인율"],
+                    mode="lines+markers", name="안부확인율",
+                    line=dict(color="#2F5496", width=2.5),
+                    fill="tozeroy", fillcolor="rgba(47,84,150,0.08)",
+                    hovertemplate="<b>%{x}</b><br>안부확인율: %{y:.1f}%<extra></extra>"
                 ))
-                fig_ab.update_layout(
-                    title="일별 안부체크율 (OFF 제외, AB열 기준)",
-                    height=320, hovermode="x unified",
+                fig_cr.update_layout(
+                    title="일별 안부확인율 (완료자 / 대상자)",
+                    height=350, hovermode="x unified",
                     xaxis=dict(type="category", title=""),
-                    yaxis=dict(title="안부체크율 (%)", range=[0, 100]),
+                    yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
                     margin=dict(t=40, b=40),
                 )
-                st.plotly_chart(fig_ab, use_container_width=True)
+                st.plotly_chart(fig_cr, use_container_width=True)
 
-            fig = px.line(daily, x="date", y="안부체크응답률", markers=True,
-                          color_discrete_sequence=["#2F5496"])
-            fig.update_layout(title="일별 안부체크 응답률 (%)", height=320,
-                              hovermode="x unified", xaxis=dict(type="category"))
-            fig.update_traces(hovertemplate="<b>%{x}</b><br>응답률: %{y:.1f}%<extra></extra>")
-            st.plotly_chart(fig, use_container_width=True)
+            # 지자체별 안부확인율 (주간 Google Sheets 데이터)
+            st.markdown("**지자체별 안부확인율 추이 (주간)**")
+            cr_mun = data.get("checkin_municipality_rate", pd.DataFrame())
+            if not cr_mun.empty and "안부확인율" in cr_mun.columns:
+                cr_show = cr_mun[cr_mun["안부확인율"].notna() & (cr_mun["안부확인율"] > 0)].copy()
+                cr_show = shorten_dates_in_df(cr_show, "시작일")
+                if not cr_show.empty:
+                    fig_mun = px.line(
+                        cr_show, x="시작일", y="안부확인율", color="지자체명",
+                        markers=True,
+                        color_discrete_sequence=px.colors.qualitative.Set2,
+                    )
+                    fig_mun.update_layout(
+                        title="지자체별 안부확인율 주간 추이",
+                        height=420, hovermode="x unified",
+                        xaxis=dict(type="category", title=""),
+                        yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
+                        legend=LEGEND_BELOW, margin=dict(t=40, b=80),
+                    )
+                    fig_mun.update_traces(
+                        hovertemplate="<b>%{x}</b><br>%{y:.1f}%<extra>%{fullData.name}</extra>"
+                    )
+                    st.plotly_chart(fig_mun, use_container_width=True)
+                else:
+                    st.info("안부확인율 데이터가 없습니다.")
+            else:
+                st.info("지자체별 안부확인율 데이터가 없습니다. (안부확인지자체 시트 확인 필요)")
 
         # ── Tab 4: 일별 AI케어 알람 응답 (발송수, 응답자수, 응답률)
         with tab4:
@@ -1619,19 +1552,39 @@ elif page == "🖐 2.안부확인":
         # DB 데이터 없으면 Google Sheets 데이터 사용 (기존 방식)
         cd = data.get("checkin_daily", pd.DataFrame())
         if not cd.empty:
-            tab1, tab2 = st.tabs(["안부체크율 추이 (Google Sheets)", "지자체별"])
+            tab1, tab2 = st.tabs(["안부확인율 추이", "지자체별 안부확인율"])
             with tab1:
-                if "안부체크율" in cd.columns and "날짜" in cd.columns:
-                    fig = px.line(cd, x="날짜", y="안부체크율", markers=False,
-                                  color_discrete_sequence=["#FF6F00"])
-                    fig.update_layout(title="일별 안부체크율 추이", height=350,
-                                      margin=dict(t=40, b=30), hovermode="x unified",
-                                      xaxis=dict(type="category"))
-                    st.plotly_chart(fig, use_container_width=True)
+                cr_mun2 = data.get("checkin_municipality_rate", pd.DataFrame())
+                if not cr_mun2.empty and "안부확인율" in cr_mun2.columns:
+                    cr2 = cr_mun2[cr_mun2["안부확인율"].notna() & (cr_mun2["안부확인율"] > 0)].copy()
+                    cr2 = shorten_dates_in_df(cr2, "시작일")
+                    if not cr2.empty:
+                        # 전체 평균 추이
+                        avg_cr = cr2.groupby("시작일")["안부확인율"].mean().reset_index()
+                        fig = px.line(avg_cr, x="시작일", y="안부확인율", markers=True,
+                                      color_discrete_sequence=["#2F5496"])
+                        fig.update_layout(title="전체 평균 안부확인율 추이", height=350,
+                                          hovermode="x unified", xaxis=dict(type="category"),
+                                          yaxis=dict(range=[0, 100]))
+                        st.plotly_chart(fig, use_container_width=True)
             with tab2:
-                checkin_mun = data.get("weekly_안부체크", pd.DataFrame())
-                if not checkin_mun.empty:
-                    plot_municipality_lines(checkin_mun, "지자체별 안부체크 수행 횟수 추이", metric_label="횟수")
+                cr_mun3 = data.get("checkin_municipality_rate", pd.DataFrame())
+                if not cr_mun3.empty and "안부확인율" in cr_mun3.columns:
+                    cr3 = cr_mun3[cr_mun3["안부확인율"].notna() & (cr_mun3["안부확인율"] > 0)].copy()
+                    cr3 = shorten_dates_in_df(cr3, "시작일")
+                    if not cr3.empty:
+                        fig2 = px.line(cr3, x="시작일", y="안부확인율", color="지자체명",
+                                       markers=True,
+                                       color_discrete_sequence=px.colors.qualitative.Set2)
+                        fig2.update_layout(title="지자체별 안부확인율 추이", height=420,
+                                           hovermode="x unified", xaxis=dict(type="category"),
+                                           yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
+                                           legend=LEGEND_BELOW, margin=dict(t=40, b=80))
+                        st.plotly_chart(fig2, use_container_width=True)
+                    else:
+                        st.info("안부확인율 데이터가 없습니다.")
+                else:
+                    st.info("지자체별 안부확인율 데이터가 없습니다.")
         else:
             st.info("안부확인 데이터가 없습니다. '📥 데이터 입력'에서 safetyCheck 데이터를 붙여넣어주세요.")
 
@@ -1677,7 +1630,18 @@ elif page == "❤ 5.심혈관체크":
                                        "심혈관체크 이용자수 + 전체이용비중")
             cf = filter_by_week_range(cardio_users, "주차", p_start, p_end, weeks) if not cardio_users.empty else pd.DataFrame()
             if not cf.empty:
-                plot_municipality_lines(cf, "지자체별 심혈관체크 이용자 추이", metric_label="이용자수")
+                # 이용자수 → 이용률 (협약인원 대비 %)
+                _reg_c = data.get("registration", pd.DataFrame())
+                if not _reg_c.empty and "지자체명" in _reg_c.columns and "협약인원" in _reg_c.columns:
+                    _contract_map = {str(r["지자체명"]).strip(): safe_numeric(r["협약인원"])
+                                     for _, r in _reg_c.iterrows() if safe_numeric(r["협약인원"]) > 0}
+                    cf = cf.copy()
+                    cf["값"] = cf.apply(
+                        lambda r: round(r["값"] / _contract_map.get(str(r["지자체명"]).strip(), 0) * 100, 1)
+                        if _contract_map.get(str(r["지자체명"]).strip(), 0) > 0 else 0, axis=1)
+                    plot_municipality_lines(cf, "지자체별 심혈관체크 이용률 추이 (협약인원 대비 %)", metric_label="이용률(%)")
+                else:
+                    plot_municipality_lines(cf, "지자체별 심혈관체크 이용자 추이", metric_label="이용자수")
         else:
             st.info("심혈관 이용자 데이터가 없습니다.")
 
@@ -2329,9 +2293,9 @@ elif page == "🔄 4.지자체별 안부체크 변경":
 
 
 # ============================================================
-# 🎮 10.맞고(와플랫+게스트)
+# 🎮 11.맞고(와플랫+게스트)
 # ============================================================
-elif page == "🎮 10.맞고(와플랫+게스트)":
+elif page == "🎮 11.맞고(와플랫+게스트)":
     st.markdown('<div class="section-header">🎮 맞고 (와플랫+게스트)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_all", weeks)
 
@@ -2426,9 +2390,9 @@ elif page == "🎮 10.맞고(와플랫+게스트)":
 
 
 # ============================================================
-# 🃏 11.맞고(와플랫)
+# 🃏 10.맞고(와플랫)
 # ============================================================
-elif page == "🃏 11.맞고(와플랫)":
+elif page == "🃏 10.맞고(와플랫)":
     st.markdown('<div class="section-header">🃏 맞고 (와플랫)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_waflat", weeks)
 
@@ -2593,7 +2557,18 @@ elif page == "😰 6.스트레스체크":
                                        "스트레스체크 이용자수 + 전체이용비중")
             sf = filter_by_week_range(stress_users, "주차", p_start, p_end, weeks) if not stress_users.empty else pd.DataFrame()
             if not sf.empty:
-                plot_municipality_lines(sf, "지자체별 스트레스체크 이용자 추이", metric_label="이용자수")
+                # 이용자수 → 이용률 (협약인원 대비 %)
+                _reg_s = data.get("registration", pd.DataFrame())
+                if not _reg_s.empty and "지자체명" in _reg_s.columns and "협약인원" in _reg_s.columns:
+                    _contract_map_s = {str(r["지자체명"]).strip(): safe_numeric(r["협약인원"])
+                                       for _, r in _reg_s.iterrows() if safe_numeric(r["협약인원"]) > 0}
+                    sf = sf.copy()
+                    sf["값"] = sf.apply(
+                        lambda r: round(r["값"] / _contract_map_s.get(str(r["지자체명"]).strip(), 0) * 100, 1)
+                        if _contract_map_s.get(str(r["지자체명"]).strip(), 0) > 0 else 0, axis=1)
+                    plot_municipality_lines(sf, "지자체별 스트레스체크 이용률 추이 (협약인원 대비 %)", metric_label="이용률(%)")
+                else:
+                    plot_municipality_lines(sf, "지자체별 스트레스체크 이용자 추이", metric_label="이용자수")
         else:
             st.info("스트레스체크 이용자 데이터가 없습니다.")
 
