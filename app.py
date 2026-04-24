@@ -396,13 +396,25 @@ def delta_html(val, suffix="", invert=False, prev_val=0):
 # ============================================================
 with st.sidebar:
     # ── 로고 ──────────────────────────────────────────────────
-    import os
-    _logo_white = os.path.join(os.path.dirname(__file__), "assets", "logo_white.png")
-    _logo_color = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
-    if os.path.exists(_logo_white):
-        st.image(_logo_white, use_container_width=True)
-    elif os.path.exists(_logo_color):
-        st.image(_logo_color, use_container_width=True)
+    import os, base64
+    _logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
+    if os.path.exists(_logo_path):
+        with open(_logo_path, "rb") as _f:
+            _logo_b64 = base64.b64encode(_f.read()).decode()
+        st.markdown(
+            f"""<div style="background:white;border-radius:12px;
+                            padding:10px 16px 8px;margin:4px 0 12px;
+                            text-align:center;
+                            box-shadow:0 2px 8px rgba(0,0,0,0.25)">
+                  <img src="data:image/png;base64,{_logo_b64}"
+                       style="max-width:150px;height:auto;display:block;margin:0 auto">
+                  <div style="font-size:0.65rem;color:#64748B;margin-top:4px;
+                              font-family:'Pretendard','Noto Sans KR',sans-serif">
+                    공공 서비스 지표 대시보드
+                  </div>
+                </div>""",
+            unsafe_allow_html=True,
+        )
     else:
         st.markdown(
             """<div style="padding:0.6rem 0 0.4rem;text-align:left">
@@ -414,8 +426,6 @@ with st.sidebar:
             </div>""",
             unsafe_allow_html=True,
         )
-    st.markdown("<hr style='border-color:rgba(255,255,255,0.12);margin:0.4rem 0 0.8rem'>",
-                unsafe_allow_html=True)
 
     weeks = data.get("주차목록", [])
     if weeks:
