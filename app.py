@@ -93,89 +93,207 @@ if not _check_password():
 # ============================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap');
 
-html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
+/* ── 기본 폰트 ── */
+html, body, [class*="css"] {
+    font-family: 'Noto Sans KR', sans-serif;
+}
 
+/* ── 전체 배경 ── */
+.stApp { background-color: #F4F6FB; }
+
+/* ══════════════════════════════════════
+   KPI 카드 — 공통 베이스
+══════════════════════════════════════ */
+.metric-card, .metric-card-green, .metric-card-red, .metric-card-orange {
+    position: relative;
+    padding: 1.4rem 1.2rem 1.1rem;
+    border-radius: 20px;
+    color: white;
+    text-align: center;
+    margin-bottom: 0.6rem;
+    overflow: hidden;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.metric-card:hover,
+.metric-card-green:hover,
+.metric-card-red:hover,
+.metric-card-orange:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
+}
+
+/* 카드 안쪽 빛 효과 */
+.metric-card::before, .metric-card-green::before,
+.metric-card-red::before, .metric-card-orange::before {
+    content: '';
+    position: absolute;
+    top: -30%; right: -10%;
+    width: 160px; height: 160px;
+    background: rgba(255,255,255,0.10);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* 라벨 (지표명) */
+.metric-card h3, .metric-card-green h3,
+.metric-card-red h3, .metric-card-orange h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.80;
+}
+
+/* 숫자 값 — 크고 굵게 */
+.metric-card h1, .metric-card-green h1,
+.metric-card-red h1, .metric-card-orange h1 {
+    margin: 0 0 0.4rem;
+    font-size: 2.6rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+/* 전주 대비 델타 */
+.metric-card p, .metric-card-green p,
+.metric-card-red p, .metric-card-orange p {
+    margin: 0;
+    font-size: 0.78rem;
+    opacity: 0.85;
+}
+.metric-card .up   { color: #A5F3C0; font-weight: 700; }
+.metric-card .down { color: #FFAB91; font-weight: 700; }
+.metric-card .flat { color: rgba(255,255,255,0.6); }
+
+/* ── 카드별 색상 ── */
 .metric-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 1.2rem; border-radius: 16px; color: white;
-    text-align: center; margin-bottom: 0.5rem;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-    transition: transform 0.2s;
+    background: linear-gradient(135deg, #5B73E8 0%, #7B52D3 100%);
+    box-shadow: 0 6px 20px rgba(91,115,232,0.35);
 }
-.metric-card:hover { transform: translateY(-2px); }
-.metric-card h3 { margin: 0; font-size: 0.75rem; opacity: 0.85; font-weight: 400; }
-.metric-card h1 { margin: 0.3rem 0; font-size: 1.8rem; font-weight: 700; }
-.metric-card p { margin: 0; font-size: 0.8rem; }
-.metric-card .up { color: #69F0AE; }
-.metric-card .down { color: #FF8A80; }
-.metric-card .flat { color: #E0E0E0; }
-
 .metric-card-green {
-    background: linear-gradient(135deg, #00C853 0%, #009624 100%);
-    padding: 1.2rem; border-radius: 16px; color: white;
-    text-align: center; margin-bottom: 0.5rem;
-    box-shadow: 0 4px 15px rgba(0, 200, 83, 0.3);
+    background: linear-gradient(135deg, #11B981 0%, #059669 100%);
+    box-shadow: 0 6px 20px rgba(17,185,129,0.35);
 }
-.metric-card-green h3 { margin: 0; font-size: 0.75rem; opacity: 0.85; }
-.metric-card-green h1 { margin: 0.3rem 0; font-size: 1.8rem; font-weight: 700; }
-.metric-card-green p { margin: 0; font-size: 0.8rem; }
-
 .metric-card-red {
-    background: linear-gradient(135deg, #FF5252 0%, #D32F2F 100%);
-    padding: 1.2rem; border-radius: 16px; color: white;
-    text-align: center; margin-bottom: 0.5rem;
-    box-shadow: 0 4px 15px rgba(255, 82, 82, 0.3);
+    background: linear-gradient(135deg, #F87171 0%, #DC2626 100%);
+    box-shadow: 0 6px 20px rgba(248,113,113,0.35);
 }
-.metric-card-red h3 { margin: 0; font-size: 0.75rem; opacity: 0.85; }
-.metric-card-red h1 { margin: 0.3rem 0; font-size: 1.8rem; font-weight: 700; }
-.metric-card-red p { margin: 0; font-size: 0.8rem; }
-
 .metric-card-orange {
-    background: linear-gradient(135deg, #FF9800 0%, #E65100 100%);
-    padding: 1.2rem; border-radius: 16px; color: white;
-    text-align: center; margin-bottom: 0.5rem;
-    box-shadow: 0 4px 15px rgba(255, 152, 0, 0.3);
+    background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
+    box-shadow: 0 6px 20px rgba(251,146,60,0.35);
 }
-.metric-card-orange h3 { margin: 0; font-size: 0.75rem; opacity: 0.85; }
-.metric-card-orange h1 { margin: 0.3rem 0; font-size: 1.8rem; font-weight: 700; }
-.metric-card-orange p { margin: 0; font-size: 0.8rem; }
 
-.status-danger { background-color: #FFCDD2; color: #B71C1C; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.8rem; display: inline-block; }
-.status-caution { background-color: #FFF9C4; color: #F57F17; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.8rem; display: inline-block; }
-.status-normal { background-color: #EEEEEE; color: #424242; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; display: inline-block; }
-.status-excellent { background-color: #C8E6C9; color: #1B5E20; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 0.8rem; display: inline-block; }
+/* ══════════════════════════════════════
+   섹션 헤더
+══════════════════════════════════════ */
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1.1rem;
+    margin: 1.8rem 0 1rem;
+    background: white;
+    border-radius: 12px;
+    border-left: 5px solid #5B73E8;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #1E293B;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
 
+/* ══════════════════════════════════════
+   인사이트 박스
+══════════════════════════════════════ */
 .insight-box {
-    background: #f8f9fa; border-left: 5px solid #2F5496;
-    padding: 1rem 1.2rem; margin: 0.5rem 0;
-    border-radius: 0 12px 12px 0; font-size: 0.9rem; line-height: 1.6;
+    background: #EFF6FF;
+    border-left: 4px solid #5B73E8;
+    padding: 0.9rem 1.2rem;
+    margin: 0.4rem 0;
+    border-radius: 0 12px 12px 0;
+    font-size: 0.88rem;
+    line-height: 1.65;
+    color: #1E293B;
 }
 .insight-box-danger {
-    background: #FFF5F5; border-left: 5px solid #FF4B4B;
-    padding: 1rem 1.2rem; margin: 0.5rem 0;
-    border-radius: 0 12px 12px 0; font-size: 0.9rem; line-height: 1.6;
+    background: #FFF5F5;
+    border-left: 4px solid #F87171;
+    padding: 0.9rem 1.2rem;
+    margin: 0.4rem 0;
+    border-radius: 0 12px 12px 0;
+    font-size: 0.88rem;
+    line-height: 1.65;
 }
 .insight-box-success {
-    background: #F0FFF4; border-left: 5px solid #00C853;
-    padding: 1rem 1.2rem; margin: 0.5rem 0;
-    border-radius: 0 12px 12px 0; font-size: 0.9rem; line-height: 1.6;
+    background: #F0FDF4;
+    border-left: 4px solid #11B981;
+    padding: 0.9rem 1.2rem;
+    margin: 0.4rem 0;
+    border-radius: 0 12px 12px 0;
+    font-size: 0.88rem;
+    line-height: 1.65;
 }
 
-.section-header {
-    background: linear-gradient(90deg, #f0f2f6, transparent);
-    padding: 0.6rem 1rem; border-radius: 8px;
-    margin: 1.5rem 0 0.8rem 0; font-weight: 700; font-size: 1.05rem;
-    border-left: 4px solid #2F5496;
-}
+/* ══════════════════════════════════════
+   상태 뱃지
+══════════════════════════════════════ */
+.status-danger   { background:#FEE2E2; color:#991B1B; padding:3px 11px; border-radius:999px; font-weight:700; font-size:0.78rem; display:inline-block; }
+.status-caution  { background:#FEF9C3; color:#92400E; padding:3px 11px; border-radius:999px; font-weight:700; font-size:0.78rem; display:inline-block; }
+.status-normal   { background:#F1F5F9; color:#475569; padding:3px 11px; border-radius:999px; font-size:0.78rem; display:inline-block; }
+.status-excellent{ background:#DCFCE7; color:#166534; padding:3px 11px; border-radius:999px; font-weight:700; font-size:0.78rem; display:inline-block; }
 
-div[data-testid="stMetricValue"] { font-size: 1.3rem; }
-.stTabs [data-baseweb="tab-list"] { gap: 4px; }
+/* ══════════════════════════════════════
+   탭 스타일
+══════════════════════════════════════ */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 2px;
+    background: #E8ECF4;
+    border-radius: 12px;
+    padding: 4px;
+}
 .stTabs [data-baseweb="tab"] {
-    padding: 8px 16px; border-radius: 8px 8px 0 0;
-    font-weight: 500; font-size: 0.85rem;
+    padding: 7px 18px;
+    border-radius: 9px;
+    font-weight: 500;
+    font-size: 0.84rem;
+    color: #64748B;
+    background: transparent;
+    border: none;
 }
+.stTabs [aria-selected="true"] {
+    background: white !important;
+    color: #5B73E8 !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+/* ══════════════════════════════════════
+   사이드바
+══════════════════════════════════════ */
+section[data-testid="stSidebar"] {
+    background: #1E293B;
+}
+section[data-testid="stSidebar"] * {
+    color: #CBD5E1 !important;
+}
+section[data-testid="stSidebar"] .stRadio label {
+    font-size: 0.85rem !important;
+    padding: 4px 0;
+}
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+    color: #94A3B8 !important;
+    font-size: 0.78rem !important;
+}
+
+/* ══════════════════════════════════════
+   데이터프레임
+══════════════════════════════════════ */
+div[data-testid="stMetricValue"] { font-size: 1.4rem; font-weight: 700; }
+
+/* ── 전체 컨텐츠 영역 카드화 ── */
+section.main > div { padding-top: 1rem; }
 </style>
 """, unsafe_allow_html=True)
 
