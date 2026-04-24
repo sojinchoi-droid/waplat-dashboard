@@ -283,7 +283,7 @@ with st.sidebar:
             "📋 Summary",
             "👥 1.회원가입 & 이탈",
             "🖐 2.안부확인",
-            "📊 3.지자체별 안부체크율",
+            "📊 3.안부체크율",
             "🔄 4.지자체별 안부체크 변경",
             "❤ 5.심혈관체크",
             "😰 6.스트레스체크",
@@ -1794,8 +1794,8 @@ elif page == "💊 7.복약관리":
 # ============================================================
 # 🎮 맞고 & 게임
 # ============================================================
-elif page == "📊 3.지자체별 안부체크율":
-    st.markdown('<div class="section-header">📊 지자체별 안부체크율</div>', unsafe_allow_html=True)
+elif page == "📊 3.안부체크율":
+    st.markdown('<div class="section-header">📊 안부체크율</div>', unsafe_allow_html=True)
 
     # 권역 분류 (세분화)
     DETAIL_REGION = {
@@ -1815,6 +1815,29 @@ elif page == "📊 3.지자체별 안부체크율":
         "강원권": "#7B1FA2", "영남권": "#C62828", "제주권": "#0277BD",
         "독거노인지원종합센터": "#1B5E20", "기관": "#795548",
     }
+
+    # ── 전체 안부체크율(OFF 제외) 추이 — gid=261480368 AB열 ───────────────
+    cd_all = data.get("checkin_daily", pd.DataFrame())
+    if not cd_all.empty and "안부체크율" in cd_all.columns and "날짜" in cd_all.columns:
+        cd_plot = cd_all[cd_all["안부체크율"].apply(safe_numeric) > 0].copy()
+        if not cd_plot.empty:
+            fig_ab = go.Figure()
+            fig_ab.add_trace(go.Scatter(
+                x=cd_plot["날짜"], y=cd_plot["안부체크율"].apply(safe_numeric),
+                mode="lines+markers", name="안부체크율(OFF 제외)",
+                line=dict(color="#2F5496", width=2.5),
+                fill="tozeroy", fillcolor="rgba(47,84,150,0.07)",
+                hovertemplate="<b>%{x}</b><br>안부체크율: %{y:.1f}%<extra>OFF 제외</extra>",
+            ))
+            fig_ab.update_layout(
+                title="안부체크율 전체 추이 (OFF 제외, AB열 기준)",
+                height=360, hovermode="x unified",
+                xaxis=dict(type="category", title="", tickangle=-45),
+                yaxis=dict(title="안부체크율 (%)", range=[0, 100]),
+                margin=dict(t=45, b=80),
+            )
+            st.plotly_chart(fig_ab, use_container_width=True)
+            st.markdown("---")
 
     checkin_rate = data.get("checkin_municipality_rate", pd.DataFrame())
 
