@@ -3184,7 +3184,8 @@ elif page == "🩺 8.건강상담":
                 if health_df[c].sum() > 0:
                     num_cols.append(c)
 
-        tab1, tab2 = st.tabs(["이용 추이", "상세 데이터"])
+        hc_mun = data.get("건강상담지자체", pd.DataFrame())
+        tab1, tab2, tab3 = st.tabs(["이용 추이", "지자체별 서비스 현황", "상세 데이터"])
 
         with tab1:
             if week_col:
@@ -3217,7 +3218,113 @@ elif page == "🩺 8.건강상담":
                                   legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
                 st.plotly_chart(fig, use_container_width=True)
 
+        # ── 탭 2: 지자체별 서비스 유형별 현황 ────────────────────────────
         with tab2:
+            if hc_mun.empty:
+                st.info("지자체별 서비스 데이터가 없습니다. (건강상담지자체 시트 확인)")
+            else:
+                SERVICE_COLS_HC = [c for c in ["전문의료진상담", "병원안내", "일반상담", "진료예약"]
+                                   if c in hc_mun.columns]
+                SERVICE_COLORS_HC = {
+                    "전문의료진상담": "#26C6DA",
+                    "병원안내":       "#5B73E8",
+                    "일반상담":       "#66BB6A",
+                    "진료예약":       "#FF6F00",
+                }
+
+                all_dates_hc = sorted(hc_mun["날짜"].unique().tolist())
+                recent_dates_hc = all_dates_hc[-16:] if len(all_dates_hc) > 16 else all_dates_hc
+
+                with st.expander("📅 기간 선택 (펼쳐서 변경)", expanded=False):
+                    hc_sel_start = st.selectbox("시작", all_dates_hc,
+                                                index=max(0, len(all_dates_hc) - 16),
+                                                key="hc_mun_start")
+                    hc_sel_end   = st.selectbox("종료", all_dates_hc,
+                                                index=len(all_dates_hc) - 1,
+                                                key="hc_mun_end")
+
+                hc_filtered = hc_mun[
+                    (hc_mun["날짜"] >= hc_sel_start) & (hc_mun["날짜"] <= hc_sel_end)
+                ].copy()
+
+                # ① 주차별 서비스 유형 스택 바 (전체 합산)
+                hc_week = hc_filtered.groupby("날짜")[SERVICE_COLS_HC].sum().reset_index()
+                hc_week = hc_week.sort_values("날짜")
+
+                fig_stack = go.Figure()
+                for sc in SERVICE_COLS_HC:
+                    fig_stack.add_trace(go.Bar(
+                        x=hc_week["날짜"], y=hc_week[sc], name=sc,
+                        marker_color=SERVICE_COLORS_HC.get(sc, "#999"),
+                        text=hc_week[sc].apply(lambda v: f"{int(v)}" if v > 0 else ""),
+                        textposition="inside", textfont=dict(size=11, color="white"),
+                        hovertemplate=f"<b>%{{x}}</b><br>{sc}: %{{y:,}}건<extra></extra>",
+                    ))
+                fig_stack.update_layout(
+                    barmode="stack",
+                    title="주차별 건강상담 서비스 유형별 이용건수",
+                    height=400, hovermode="x unified",
+                    xaxis=dict(type="category", tickangle=-45, tickfont=dict(size=11)),
+                    yaxis=dict(title="이용건수"),
+                    legend=LEGEND_BELOW, margin=dict(t=45, b=90),
+                )
+                st.plotly_chart(fig_stack, use_container_width=True)
+
+                # ② 최신 주차 지자체별 현황
+                if all_dates_hc:
+                    latest_hc = hc_filtered[hc_filtered["날짜"] == hc_filtered["날짜"].max()].copy()
+                    st.markdown(f"**📌 {latest_hc['날짜'].iloc[0]} 기준 지자체별 현황**")
+                    latest_hc = latest_hc.sort_values("합계", ascending=True)
+                    fig_mun_hc = go.Figure()
+                    for sc in SERVICE_COLS_HC:
+                        fig_mun_hc.add_trace(go.Bar(
+                            y=latest_hc["지자체"], x=latest_hc[sc],
+                            name=sc, orientation="h",
+                            marker_color=SERVICE_COLORS_HC.get(sc, "#999"),
+                            text=latest_hc[sc].apply(lambda v: f"{int(v)}" if v > 0 else ""),
+                            textposition="inside", textfont=dict(size=11, color="white"),
+                            hovertemplate=f"<b>%{{y}}</b><br>{sc}: %{{x:,}}건<extra></extra>",
+                        ))
+                    fig_mun_hc.update_layout(
+                        barmode="stack",
+                        title="지자체별 서비스 유형별 이용건수",
+                        height=max(350, len(latest_hc) * 32),
+                        xaxis=dict(title="이용건수"),
+                        yaxis=dict(title=""),
+                        legend=LEGEND_BELOW, margin=dict(t=45, b=90),
+                    )
+                    st.plotly_chart(fig_mun_hc, use_container_width=True)
+
+                # ③ 지자체별 주차별 라인 차트 (서비스 유형 선택)
+                st.markdown("---")
+                sel_svc = st.selectbox("📊 서비스 유형별 지자체 추이",
+                                       SERVICE_COLS_HC + ["합계"],
+                                       key="hc_svc_select")
+                if sel_svc in hc_filtered.columns:
+                    fig_line = px.line(
+                        hc_filtered.sort_values("날짜"),
+                        x="날짜", y=sel_svc, color="지자체",
+                        markers=True,
+                        color_discrete_sequence=px.colors.qualitative.Set2,
+                        title=f"지자체별 {sel_svc} 주간 추이",
+                    )
+                    fig_line.update_layout(
+                        height=430, hovermode="x unified",
+                        xaxis=dict(type="category", tickangle=-45, tickfont=dict(size=11)),
+                        yaxis=dict(title="이용건수"),
+                        legend=LEGEND_BELOW, margin=dict(t=45, b=100),
+                    )
+                    fig_line.update_traces(
+                        hovertemplate="<b>%{x}</b><br>%{y:,}건<extra>%{fullData.name}</extra>"
+                    )
+                    st.plotly_chart(fig_line, use_container_width=True)
+
+                # ④ 원본 테이블
+                with st.expander("📋 원본 데이터 보기"):
+                    st.dataframe(hc_filtered.sort_values(["날짜", "지자체"]),
+                                 use_container_width=True, height=350)
+
+        with tab3:
             st.dataframe(health_df, use_container_width=True, height=400)
     else:
         st.info("건강상담 데이터가 없습니다.")

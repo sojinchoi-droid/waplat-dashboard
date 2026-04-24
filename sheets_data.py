@@ -34,6 +34,7 @@ SHEET_GIDS = {
     "AI생활지원사신규": "887906400",
     "안부확인raw":      "1323180805",
     "안부체크off":      "1043653372",
+    "건강상담지자체":   "867975933",
 }
 
 # 지자체 키워드 (컬럼명에서 지자체 자동 탐지용)
@@ -810,6 +811,47 @@ def get_checkin_municipality_rate(sheets: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def get_health_consult_by_municipality(sheets: dict) -> pd.DataFrame:
+    """건강상담 지자체별 서비스유형별 이용현황 (gid=867975933)
+
+    컬럼 구조 (위치 기반):
+      A(0): 날짜(주차),  B(1): 지자체,
+      C(2): 전문의료진상담, D(3): 병원안내, E(4): 일반상담, F(5): 진료예약
+
+    Returns: DataFrame [날짜, 지자체, 전문의료진상담, 병원안내, 일반상담, 진료예약, 합계]
+    """
+    df = sheets.get("건강상담지자체", pd.DataFrame())
+    if df.empty or len(df.columns) < 3:
+        return pd.DataFrame()
+
+    df = df.copy()
+    cols = list(df.columns)
+
+    # 위치 기반 컬럼 이름 매핑
+    POSITION_MAP = {0: "날짜", 1: "지자체", 2: "전문의료진상담",
+                    3: "병원안내", 4: "일반상담", 5: "진료예약"}
+    rename = {cols[i]: name for i, name in POSITION_MAP.items() if i < len(cols)}
+    df = df.rename(columns=rename)
+
+    SERVICE_COLS = [c for c in ["전문의료진상담", "병원안내", "일반상담", "진료예약"]
+                    if c in df.columns]
+
+    # 날짜/지자체 비어있는 행 제거
+    df["날짜"]   = df["날짜"].astype(str).str.strip()
+    df["지자체"] = df["지자체"].astype(str).str.strip()
+    df = df[(df["날짜"] != "") & (df["날짜"] != "nan") &
+            (df["지자체"] != "") & (df["지자체"] != "nan")].copy()
+
+    # 서비스 컬럼 숫자 변환
+    for c in SERVICE_COLS:
+        df[c] = df[c].apply(safe_numeric)
+
+    df["합계"] = df[SERVICE_COLS].sum(axis=1)
+    df = df[df["합계"] > 0]  # 빈 행 제거
+
+    return df[["날짜", "지자체"] + SERVICE_COLS + ["합계"]].reset_index(drop=True)
+
+
 # ============================================================
 # 통합 대시보드 데이터 생성
 # ============================================================
@@ -870,6 +912,9 @@ def build_dashboard_data(sheets: dict) -> dict:
     # 7. 집계형 시트 (전체 추이용)
     for key in ["건강상담", "생활상담"]:
         result[key] = sheets.get(key, pd.DataFrame())
+
+    # 8. 건강상담 지자체별 서비스 유형별 이용현황
+    result["건강상담지자체"] = get_health_consult_by_municipality(sheets)
 
     # 8. DB fallback — Google Sheets 데이터가 비어있으면 DB에서 가져오기
     try:
