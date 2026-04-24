@@ -395,7 +395,27 @@ def delta_html(val, suffix="", invert=False, prev_val=0):
 # 사이드바
 # ============================================================
 with st.sidebar:
-    st.title("📊 와플랫 공공 지표")
+    # ── 로고 ──────────────────────────────────────────────────
+    import os
+    _logo_white = os.path.join(os.path.dirname(__file__), "assets", "logo_white.png")
+    _logo_color = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
+    if os.path.exists(_logo_white):
+        st.image(_logo_white, use_container_width=True)
+    elif os.path.exists(_logo_color):
+        st.image(_logo_color, use_container_width=True)
+    else:
+        st.markdown(
+            """<div style="padding:0.6rem 0 0.4rem;text-align:left">
+              <span style="font-size:1.6rem;font-weight:900;color:white;
+                           font-family:'Pretendard','Noto Sans KR',sans-serif;
+                           letter-spacing:-0.03em">waplat</span>
+              <span style="font-size:0.7rem;color:rgba(255,255,255,0.55);
+                           display:block;margin-top:2px">공공 서비스 지표 대시보드</span>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+    st.markdown("<hr style='border-color:rgba(255,255,255,0.12);margin:0.4rem 0 0.8rem'>",
+                unsafe_allow_html=True)
 
     weeks = data.get("주차목록", [])
     if weeks:
@@ -488,23 +508,20 @@ def shorten_dates_in_df(df, col):
     return df
 
 def date_to_week_label(date_str):
-    """날짜 문자열을 주간 기간 레이블로 변환: 2026-04-05 → 4월5일~11일"""
-    from datetime import datetime, timedelta
+    """날짜 문자열을 ISO 주차 형식으로 변환: 2026-04-05 → 26-15 (다른 주차 컬럼과 통일)"""
+    from datetime import datetime
     s = str(date_str).strip()
     try:
         if len(s) >= 10 and s[4:5] == "-":
             dt = datetime.strptime(s[:10], "%Y-%m-%d")
-            end = dt + timedelta(days=6)
-            if dt.month == end.month:
-                return f"{dt.month}월{dt.day}일~{end.day}일"
-            else:
-                return f"{dt.month}월{dt.day}일~{end.month}월{end.day}일"
+            yr, wk, _ = dt.isocalendar()
+            return f"{str(yr)[2:]}-{wk:02d}"
     except Exception:
         pass
     return s
 
 def week_label_df(df, col):
-    """DataFrame의 날짜 컬럼을 주간 기간 레이블로 변환 (호출 전 시간순 정렬 권장)"""
+    """DataFrame의 날짜 컬럼을 ISO 주차 레이블로 변환 (호출 전 시간순 정렬 권장)"""
     df = df.copy()
     df[col] = df[col].apply(date_to_week_label)
     return df
@@ -1497,12 +1514,20 @@ elif page == "🖐 2.안부확인":
                     fill="tozeroy", fillcolor="rgba(47,84,150,0.08)",
                     hovertemplate="<b>%{x}</b><br>안부확인율: %{y:.1f}%<extra></extra>"
                 ))
+                # x축 틱 수 제한 (최대 24개)
+                _cr_dates = daily["date"].tolist()
+                _step = max(1, len(_cr_dates) // 24)
+                _tick_vals = _cr_dates[::_step]
                 fig_cr.update_layout(
                     title="일별 안부확인율 (완료자 / 대상자)",
                     height=350, hovermode="x unified",
-                    xaxis=dict(type="category", title=""),
+                    xaxis=dict(
+                        type="category", title="",
+                        tickmode="array", tickvals=_tick_vals,
+                        tickangle=-45, tickfont=dict(size=11),
+                    ),
                     yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
-                    margin=dict(t=40, b=40),
+                    margin=dict(t=40, b=80),
                 )
                 st.plotly_chart(fig_cr, use_container_width=True)
 
@@ -1511,6 +1536,9 @@ elif page == "🖐 2.안부확인":
             if not cr_mun.empty and "안부확인율" in cr_mun.columns:
                 cr_show = cr_mun[cr_mun["안부확인율"].notna() & (cr_mun["안부확인율"] > 0)].copy()
                 cr_show = cr_show.sort_values("시작일")
+                # 최근 16주만 기본 표시
+                recent_dates = sorted(cr_show["시작일"].unique())[-16:]
+                cr_show = cr_show[cr_show["시작일"].isin(recent_dates)]
                 cr_show = week_label_df(cr_show, "시작일")
                 if not cr_show.empty:
                     fig_mun = px.line(
@@ -1519,11 +1547,14 @@ elif page == "🖐 2.안부확인":
                         color_discrete_sequence=px.colors.qualitative.Set2,
                     )
                     fig_mun.update_layout(
-                        title="지자체별 안부확인율 주간 추이",
+                        title="지자체별 안부확인율 주간 추이 (최근 16주)",
                         height=420, hovermode="x unified",
-                        xaxis=dict(type="category", title=""),
+                        xaxis=dict(
+                            type="category", title="",
+                            tickangle=-45, tickfont=dict(size=11),
+                        ),
                         yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
-                        legend=LEGEND_BELOW, margin=dict(t=40, b=80),
+                        legend=LEGEND_BELOW, margin=dict(t=40, b=100),
                     )
                     fig_mun.update_traces(
                         hovertemplate="<b>%{x}</b><br>%{y:.1f}%<extra>%{fullData.name}</extra>"
@@ -1982,21 +2013,33 @@ elif page == "📊 3.안부체크율":
     cd_all = data.get("checkin_daily", pd.DataFrame())
     if not cd_all.empty and "안부체크율" in cd_all.columns and "날짜" in cd_all.columns:
         cd_plot = cd_all[cd_all["안부체크율"].apply(safe_numeric) > 0].copy()
+        # 최근 26주(182일)만 표시
+        cd_plot = cd_plot.sort_values("날짜").tail(182)
         if not cd_plot.empty:
+            # x축 틱 수 제한: 최대 24개만 표시
+            n_pts = len(cd_plot)
+            tick_step = max(1, n_pts // 24)
+            tick_vals = cd_plot["날짜"].tolist()[::tick_step]
+
             fig_ab = go.Figure()
             fig_ab.add_trace(go.Scatter(
                 x=cd_plot["날짜"], y=cd_plot["안부체크율"].apply(safe_numeric),
                 mode="lines+markers", name="안부체크율(OFF 제외)",
                 line=dict(color="#2F5496", width=2.5),
+                marker=dict(size=5),
                 fill="tozeroy", fillcolor="rgba(47,84,150,0.07)",
                 hovertemplate="<b>%{x}</b><br>안부체크율: %{y:.1f}%<extra>OFF 제외</extra>",
             ))
             fig_ab.update_layout(
                 title="안부체크율 전체 추이 (OFF 제외, AB열 기준)",
                 height=360, hovermode="x unified",
-                xaxis=dict(type="category", title="", tickangle=-45),
+                xaxis=dict(
+                    type="category", title="",
+                    tickmode="array", tickvals=tick_vals,
+                    tickangle=-45, tickfont=dict(size=11),
+                ),
                 yaxis=dict(title="안부체크율 (%)", range=[0, 100]),
-                margin=dict(t=45, b=80),
+                margin=dict(t=45, b=90),
             )
             st.plotly_chart(fig_ab, use_container_width=True)
             st.markdown("---")
@@ -2007,14 +2050,9 @@ elif page == "📊 3.안부체크율":
         cr = checkin_rate[checkin_rate["안부체크율"].notna()].copy()
         cr["권역"] = cr["지자체명"].map(DETAIL_REGION).fillna("기타")
 
-        # 📅 날짜 기간 선택기 (기본: 2026-01-01부터)
+        # 📅 날짜 기간 선택기 (기본: 최근 16주)
         all_dates = sorted(cr["시작일"].unique())
-        default_start = "2026-01-01"
-        default_idx = 0
-        for i, d in enumerate(all_dates):
-            if d >= default_start:
-                default_idx = i
-                break
+        default_idx = max(0, len(all_dates) - 16)  # 최근 16주 기본 표시
 
         with st.expander("📅 기간 설정 (펼쳐서 변경)", expanded=False):
             dc1, dc2 = st.columns(2)
@@ -2078,9 +2116,12 @@ elif page == "📊 3.안부체크율":
                 fig.update_layout(
                     title=f"{region} 안부체크율 추이", height=400,
                     hovermode="x unified",
-                    xaxis=dict(type="category", title=""),
+                    xaxis=dict(
+                        type="category", title="",
+                        tickangle=-45, tickfont=dict(size=11),
+                    ),
                     yaxis=dict(title="안부체크율 (%)", range=[0, 100]),
-                    legend=LEGEND_BELOW, margin=dict(t=40, b=70),
+                    legend=LEGEND_BELOW, margin=dict(t=40, b=90),
                 )
                 fig.update_traces(hovertemplate="<b>%{x}</b><br>%{y:.1f}%<extra>%{fullData.name}</extra>")
                 st.plotly_chart(fig, use_container_width=True)
