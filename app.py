@@ -2108,10 +2108,17 @@ elif page == "📊 3.안부체크율":
 
                     fig = px.bar(latest_data, y="지자체명", x="안부체크율", orientation="h",
                                  color="권역", color_discrete_map=REGION_COLORS,
-                                 height=max(400, len(latest_data) * 30))
-                    fig.update_layout(title=f"지자체별 안부체크율 ({latest_date})",
-                                      legend=LEGEND_BELOW, margin=dict(t=40, b=70))
-                    fig.update_traces(texttemplate="%{x:.1f}%", textposition="outside")
+                                 height=min(520, max(320, len(latest_data) * 22)))
+                    fig.update_layout(
+                        title=f"지자체별 안부체크율 ({latest_date})",
+                        legend=LEGEND_BELOW, margin=dict(t=40, b=70),
+                        xaxis=dict(range=[0, 105]),
+                        yaxis=dict(tickfont=dict(size=11)),
+                    )
+                    fig.update_traces(
+                        texttemplate="%{x:.1f}%", textposition="outside",
+                        textfont=dict(size=12),
+                    )
                     st.plotly_chart(fig, use_container_width=True)
 
         # 권역별 탭
@@ -2142,9 +2149,17 @@ elif page == "📊 3.안부체크율":
                     latest = region_data[region_data["시작일"] == dates[-1]].sort_values("안부체크율", ascending=True)
                     fig2 = px.bar(latest, y="지자체명", x="안부체크율", orientation="h",
                                   color_discrete_sequence=[REGION_COLORS.get(region, "#666")],
-                                  height=max(250, len(latest) * 35))
-                    fig2.update_layout(title=f"{region} 최신 안부체크율", margin=dict(t=40, b=10))
-                    fig2.update_traces(texttemplate="%{x:.1f}%", textposition="outside")
+                                  height=min(400, max(200, len(latest) * 26)))
+                    fig2.update_layout(
+                        title=f"{region} 최신 안부체크율",
+                        margin=dict(t=40, b=10),
+                        xaxis=dict(range=[0, 105]),
+                        yaxis=dict(tickfont=dict(size=11)),
+                    )
+                    fig2.update_traces(
+                        texttemplate="%{x:.1f}%", textposition="outside",
+                        textfont=dict(size=12),
+                    )
                     st.plotly_chart(fig2, use_container_width=True)
 
         # 추가 지표
