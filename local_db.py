@@ -181,7 +181,7 @@ def init_db():
         monitoring_start_date TEXT NOT NULL,
         memo TEXT DEFAULT '',
         agency_name TEXT NOT NULL,
-        target_users INTEGER DEFAULT 0,
+        contract_users INTEGER DEFAULT 0,
         registered_users INTEGER DEFAULT 0,
         joined_users INTEGER DEFAULT 0,
         registered_rate REAL DEFAULT 0,
@@ -189,6 +189,12 @@ def init_db():
         UNIQUE(agency_name)
     )
     """)
+    # 마이그레이션: 구버전 DB에 target_users로 생성된 경우 contract_users로 rename
+    _cols = [r[1] for r in c.execute("PRAGMA table_info(safe_agency_status)").fetchall()]
+    if "target_users" in _cols and "contract_users" not in _cols:
+        c.execute("ALTER TABLE safe_agency_status RENAME COLUMN target_users TO contract_users")
+    elif "contract_users" not in _cols:
+        c.execute("ALTER TABLE safe_agency_status ADD COLUMN contract_users INTEGER DEFAULT 0")
 
     # 10. 주간 지표 통합 테이블 (Google Sheets → DB 임포트용)
     c.execute("""
