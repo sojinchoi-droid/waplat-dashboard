@@ -427,10 +427,8 @@ with st.sidebar:
     st.caption("4시간마다 자동 새로고침")
 
     if DATA_LOADED:
-        # 데이터 소스 상태 — session_state에 캐시해 DB 쿼리 반복 방지
-        if "agency_stats" not in st.session_state:
-            st.session_state["agency_stats"] = get_agency_summary(sheets)
-        agency_stats = st.session_state["agency_stats"]
+        # 데이터 소스 상태 — 항상 최신 데이터 사용 (summary와 동기화)
+        agency_stats = get_agency_summary(sheets)
         if agency_stats.get("total", 0) > 0:
             st.caption(f"🏛 지자체 {agency_stats.get('active', 0)}개 운영 중")
             st.caption(f"🛡 세이프 {agency_stats.get('safe_count', 0)} | 📋 베이직 {agency_stats.get('basic_count', 0)}")
@@ -470,6 +468,28 @@ def shorten_dates_in_df(df, col):
     """DataFrame의 날짜 컬럼을 짧은 형식으로 변환"""
     df = df.copy()
     df[col] = df[col].apply(shorten_date)
+    return df
+
+def date_to_week_label(date_str):
+    """날짜 문자열을 주간 기간 레이블로 변환: 2026-04-05 → 4월5일~11일"""
+    from datetime import datetime, timedelta
+    s = str(date_str).strip()
+    try:
+        if len(s) >= 10 and s[4:5] == "-":
+            dt = datetime.strptime(s[:10], "%Y-%m-%d")
+            end = dt + timedelta(days=6)
+            if dt.month == end.month:
+                return f"{dt.month}월{dt.day}일~{end.day}일"
+            else:
+                return f"{dt.month}월{dt.day}일~{end.month}월{end.day}일"
+    except Exception:
+        pass
+    return s
+
+def week_label_df(df, col):
+    """DataFrame의 날짜 컬럼을 주간 기간 레이블로 변환 (호출 전 시간순 정렬 권장)"""
+    df = df.copy()
+    df[col] = df[col].apply(date_to_week_label)
     return df
 
 # 공통 범례 설정 (X축 겹침 방지)
@@ -525,21 +545,26 @@ def plot_bar_rate_dual(df, x_col, bar_col, bar_label, bar_color,
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     valid = df[df[x_col].astype(str).str.strip() != "nan"].copy()
     bar_vals = valid[bar_col].apply(safe_numeric)
+    # 막대: 반투명으로 배경 처리 → 꺾은선(이용비중)이 더 잘 보임
     fig.add_trace(go.Bar(
         x=valid[x_col], y=bar_vals, name=bar_label,
-        marker_color=bar_color, opacity=0.85,
+        marker_color=bar_color, opacity=0.55,
         text=bar_vals.apply(lambda v: f"{int(v):,}" if v == int(v) else f"{v:.1f}"),
-        textposition="outside", textfont=dict(size=13),
+        textposition="outside", textfont=dict(size=12, color="#333"),
         hovertemplate=f"<b>%{{x}}</b><br>{bar_label}: %{{y:,}}{bar_unit}<extra></extra>"
     ), secondary_y=False)
     if line_col and line_col in valid.columns:
         line_vals = valid[line_col].apply(safe_numeric)
+        # 꺾은선: 굵고 선명하게 — 이용비중이 핵심 지표
         fig.add_trace(go.Scatter(
             x=valid[x_col], y=line_vals, name=line_label,
             mode="lines+markers+text",
-            line=dict(color=line_color, width=2),
-            text=line_vals.apply(lambda v: f"{v:.1f}{line_unit}"),
-            textposition="top center", textfont=dict(size=13, color=line_color),
+            line=dict(color=line_color, width=3),
+            marker=dict(size=9, color=line_color,
+                        line=dict(color="white", width=2)),
+            text=line_vals.apply(lambda v: f"<b>{v:.1f}{line_unit}</b>"),
+            textposition="top center",
+            textfont=dict(size=13, color=line_color),
             hovertemplate=f"<b>%{{x}}</b><br>{line_label}: %{{y:.1f}}{line_unit}<extra></extra>"
         ), secondary_y=True)
     fig.update_layout(
@@ -1468,7 +1493,8 @@ elif page == "🖐 2.안부확인":
             cr_mun = data.get("checkin_municipality_rate", pd.DataFrame())
             if not cr_mun.empty and "안부확인율" in cr_mun.columns:
                 cr_show = cr_mun[cr_mun["안부확인율"].notna() & (cr_mun["안부확인율"] > 0)].copy()
-                cr_show = shorten_dates_in_df(cr_show, "시작일")
+                cr_show = cr_show.sort_values("시작일")
+                cr_show = week_label_df(cr_show, "시작일")
                 if not cr_show.empty:
                     fig_mun = px.line(
                         cr_show, x="시작일", y="안부확인율", color="지자체명",
@@ -1642,7 +1668,8 @@ elif page == "🖐 2.안부확인":
         cr_base = data.get("checkin_municipality_rate", pd.DataFrame())
         if not cr_base.empty and "안부확인율" in cr_base.columns:
             cr_all = cr_base[cr_base["안부확인율"].notna() & (cr_base["안부확인율"] > 0)].copy()
-            cr_all = shorten_dates_in_df(cr_all, "시작일")
+            cr_all = cr_all.sort_values("시작일")
+            cr_all = week_label_df(cr_all, "시작일")
             if not cr_all.empty:
                 # ① 전체 평균 추이
                 avg_cr = cr_all.groupby("시작일")["안부확인율"].mean().reset_index()
@@ -1709,7 +1736,7 @@ elif page == "❤ 5.심혈관체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#E91E63",
-                                       _rc, "전체이용비중", "#AD1457",
+                                       _rc, "전체이용비중", "#1565C0",
                                        "심혈관체크 이용자수 + 전체이용비중")
             cf = filter_by_week_range(cardio_users, "주차", p_start, p_end, weeks) if not cardio_users.empty else pd.DataFrame()
             if not cf.empty:
@@ -1982,9 +2009,10 @@ elif page == "📊 3.안부체크율":
                 cr_date_end = st.selectbox("종료일", end_options, index=len(end_options)-1, key="cr_date_end")
             st.caption(f"선택 기간: {cr_date_start} ~ {cr_date_end}")
 
-        # 기간 필터 적용
+        # 기간 필터 적용 (날짜 원본으로 필터링 후, 시간순 정렬 → 주차 레이블 변환)
         cr = cr[(cr["시작일"] >= cr_date_start) & (cr["시작일"] <= cr_date_end)]
-        cr = shorten_dates_in_df(cr, "시작일")
+        cr = cr.sort_values("시작일")
+        cr = week_label_df(cr, "시작일")
 
         # 현재 활성 지자체만 필터링 (계약 종료된 마포구청 등 제외)
         active_list = get_active_agencies_for_week(selected_week) if selected_week else []
@@ -2005,7 +2033,7 @@ elif page == "📊 3.안부체크율":
         # 전체 비교 탭
         with tabs[0]:
             if selected_week:
-                dates = sorted(cr["시작일"].unique())
+                dates = list(dict.fromkeys(cr["시작일"].tolist()))  # 시간순 정렬 보존
                 if dates:
                     latest_date = dates[-1]
                     latest_data = cr[cr["시작일"] == latest_date].copy()
@@ -2041,7 +2069,7 @@ elif page == "📊 3.안부체크율":
                 st.plotly_chart(fig, use_container_width=True)
 
                 # 해당 권역 최신 바 차트
-                dates = sorted(region_data["시작일"].unique())
+                dates = list(dict.fromkeys(region_data["시작일"].tolist()))  # 시간순 정렬 보존
                 if dates:
                     latest = region_data[region_data["시작일"] == dates[-1]].sort_values("안부체크율", ascending=True)
                     fig2 = px.bar(latest, y="지자체명", x="안부체크율", orientation="h",
@@ -2057,7 +2085,8 @@ elif page == "📊 3.안부체크율":
             st.markdown("---")
             selected_extra = st.selectbox("추가 지표 보기", extra_metrics)
             er = checkin_rate[checkin_rate[selected_extra].notna()].copy()
-            er = shorten_dates_in_df(er, "시작일")
+            er = er.sort_values("시작일")
+            er = week_label_df(er, "시작일")
             if not er.empty:
                 er["권역"] = er["지자체명"].map(DETAIL_REGION).fillna("기타")
                 sel_region = st.radio("권역 선택", ["전체"] + sorted(er["권역"].unique().tolist()), horizontal=True, key="extra_region")
@@ -2522,7 +2551,7 @@ elif page == "🃏 10.맞고(와플랫)":
                 mu = shorten_dates_in_df(mu, _wc)
                 if _sum_col:
                     plot_bar_rate_dual(mu, _wc, _sum_col, "이용자수", "#FF6F00",
-                                       _rc, "전체이용비중", "#E65100",
+                                       _rc, "전체이용비중", "#1565C0",
                                        "맞고(와플랫) 이용자수 + 전체이용비중")
             if not df.empty:
                 dff = filter_by_week_range(df, "주차", p_start, p_end, weeks)
@@ -2661,7 +2690,7 @@ elif page == "😰 6.스트레스체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#7B1FA2",
-                                       _rc, "전체이용비중", "#4A148C",
+                                       _rc, "전체이용비중", "#00897B",
                                        "스트레스체크 이용자수 + 전체이용비중")
             sf = filter_by_week_range(stress_users, "주차", p_start, p_end, weeks) if not stress_users.empty else pd.DataFrame()
             if not sf.empty:
@@ -2918,52 +2947,52 @@ elif page == "🤖 AI 생활지원사":
                     .agg(계약시작주차=("기간", "first"), 알람요일=("알람요일", "first"))
                     .reset_index()
                 )
-                info_cols = st.columns(len(mun_info))
-                for i, (_, row) in enumerate(mun_info.iterrows()):
-                    mun = row["지자체"]
-                    color = MUN_COLORS.get(mun, "#607D8B")
-                    alarm = row["알람요일"] or "미정"
-                    # "3월 8일~14일" → "3월 8일" (~ 앞부분만)
-                    raw_period = row["계약시작주차"] or "-"
-                    start_date = raw_period.split("~")[0].strip()
-                    with info_cols[i]:
-                        st.markdown(
-                            f"""<div style="background:{color};border-radius:10px;
-                                padding:0.7rem 1rem;color:white;text-align:center">
-                              <b style="font-size:0.95rem">{mun}</b><br>
-                              <span style="font-size:0.8rem;opacity:0.9">
-                                📅 {start_date} &nbsp;|&nbsp; 🔔 {alarm}
-                              </span>
-                            </div>""",
-                            unsafe_allow_html=True,
-                        )
-                st.markdown("---")
-
-
-                # ── 최신 주차 요약 ──────────────────────────────────────────
+                # ── 지자체별 현황 카드 (계약정보 + 최신 실적 통합) ───────────────────
+                # 계약 시작주차 lookup: mun_info에서 추출
+                mun_start_map = {
+                    row["지자체"]: (row["계약시작주차"] or "-")
+                    for _, row in mun_info.iterrows()
+                }
                 latest_period = periods[-1] if periods else None
                 if latest_period:
                     latest = mun_only[mun_only["기간"] == latest_period].copy()
-                    st.markdown(f"**{latest_period} 기준 지자체별 현황**")
+                    st.markdown(
+                        f"<div style='font-weight:700;font-size:0.95rem;"
+                        f"color:#1E293B;margin:0.3rem 0 0.8rem'>"
+                        f"📌 {latest_period} 기준 지자체별 현황</div>",
+                        unsafe_allow_html=True,
+                    )
                     cols_kpi = st.columns(len(latest))
                     for i, (_, row) in enumerate(latest.iterrows()):
                         mun = row["지자체"]
                         color = MUN_COLORS.get(mun, "#607D8B")
-                        day_str = f"({row['알람요일']})" if row.get("알람요일") else ""
-                        intro_pct = safe_numeric(row.get("intro(%)", 0))
-                        svc_pct   = safe_numeric(row.get("service proposal(%)", 0))
-                        prog_pct  = safe_numeric(row.get("program(%)", 0))
+                        alarm = row.get("알람요일") or "미정"
+                        intro_pct  = safe_numeric(row.get("intro(%)", 0))
+                        svc_pct    = safe_numeric(row.get("service proposal(%)", 0))
+                        prog_pct   = safe_numeric(row.get("program(%)", 0))
                         alarm_user = int(safe_numeric(row.get("receiveAlarmUserCount", 0)))
+                        raw_period = mun_start_map.get(mun, "-")
+                        start_date = raw_period.split("~")[0].strip() if "~" in raw_period else raw_period
                         with cols_kpi[i]:
                             st.markdown(
-                                f"""<div style="background:{color};border-radius:12px;padding:1rem;color:white;text-align:center">
-                                <b style="font-size:1rem">{mun}{day_str}</b><br>
-                                <span style="font-size:0.8rem;opacity:0.85">알람도달 {alarm_user}명</span><br>
-                                <span style="font-size:1.5rem;font-weight:700">{intro_pct:.0f}%</span><br>
-                                <span style="font-size:0.75rem">인트로 참여율</span><br>
-                                <span style="font-size:0.85rem">서비스 {svc_pct:.0f}% | 프로그램 {prog_pct:.0f}%</span>
+                                f"""<div style="background:{color};border-radius:14px;
+                                    padding:1.2rem 1rem;color:white;text-align:center;
+                                    box-shadow:0 4px 12px rgba(0,0,0,0.15)">
+                                  <b style="font-size:1.05rem">{mun}</b><br>
+                                  <div style="font-size:0.78rem;opacity:0.9;margin:0.3rem 0 0.5rem">
+                                    📅 {start_date} &nbsp;|&nbsp; 🔔 {alarm} 알람
+                                  </div>
+                                  <hr style="border:none;border-top:1px solid rgba(255,255,255,0.35);margin:0 0 0.6rem">
+                                  <div style="font-size:0.78rem;opacity:0.85;margin-bottom:0.2rem">
+                                    📨 알람도달 {alarm_user}명
+                                  </div>
+                                  <div style="font-size:1.9rem;font-weight:900;line-height:1.1">{intro_pct:.0f}%</div>
+                                  <div style="font-size:0.72rem;opacity:0.85;margin-bottom:0.5rem">📊 인트로 참여율</div>
+                                  <div style="font-size:0.82rem">
+                                    🛎️ 서비스 {svc_pct:.0f}% &nbsp;|&nbsp; ✅ 프로그램 {prog_pct:.0f}%
+                                  </div>
                                 </div>""",
-                                unsafe_allow_html=True
+                                unsafe_allow_html=True,
                             )
 
                 st.markdown("---")
