@@ -7,7 +7,21 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 from plotly.subplots import make_subplots
+
+# Plotly 전역 폰트: Pretendard (한국어 가독성 최적화)
+pio.templates["waplat"] = go.layout.Template(
+    layout=go.Layout(
+        font=dict(family="Pretendard, Noto Sans KR, sans-serif", size=13, color="#1E293B"),
+        title=dict(font=dict(size=15, color="#1E293B", family="Pretendard, Noto Sans KR")),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        xaxis=dict(gridcolor="#F1F5F9", linecolor="#E2E8F0"),
+        yaxis=dict(gridcolor="#F1F5F9", linecolor="#E2E8F0"),
+    )
+)
+pio.templates.default = "waplat"
 
 from sheets_data import (
     fetch_all_sheets, fetch_sheet, SHEET_GIDS,
@@ -93,11 +107,14 @@ if not _check_password():
 # ============================================================
 st.markdown("""
 <style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap');
 
-/* ── 기본 폰트 ── */
+/* ── 기본 폰트: Pretendard (가독성 최적화) ── */
 html, body, [class*="css"] {
-    font-family: 'Noto Sans KR', sans-serif;
+    font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
 }
 
 /* ── 전체 배경 ── */
@@ -515,10 +532,10 @@ def plot_weekly_series(df, x_col, y_col, title, color="#2F5496", height=300):
         fig.add_trace(go.Scatter(
             x=[latest[x_col]], y=[latest_val],
             mode="markers+text",
-            marker=dict(size=12, color=color, line=dict(width=2, color="white")),
+            marker=dict(size=13, color=color, line=dict(width=2, color="white")),
             text=[f"{arrow} {abs(delta):,.0f} ({abs(pct):.1f}%)"],
             textposition="top center",
-            textfont=dict(size=11, color=color_d),
+            textfont=dict(size=13, color=color_d, family="Pretendard, Noto Sans KR"),
             showlegend=False,
             hoverinfo="skip",
         ))
@@ -550,7 +567,7 @@ def plot_bar_rate_dual(df, x_col, bar_col, bar_label, bar_color,
         x=valid[x_col], y=bar_vals, name=bar_label,
         marker_color=bar_color, opacity=0.55,
         text=bar_vals.apply(lambda v: f"{int(v):,}" if v == int(v) else f"{v:.1f}"),
-        textposition="outside", textfont=dict(size=12, color="#333"),
+        textposition="outside", textfont=dict(size=14, color="#222", family="Noto Sans KR"),
         hovertemplate=f"<b>%{{x}}</b><br>{bar_label}: %{{y:,}}{bar_unit}<extra></extra>"
     ), secondary_y=False)
     if line_col and line_col in valid.columns:
@@ -560,11 +577,11 @@ def plot_bar_rate_dual(df, x_col, bar_col, bar_label, bar_color,
             x=valid[x_col], y=line_vals, name=line_label,
             mode="lines+markers+text",
             line=dict(color=line_color, width=3),
-            marker=dict(size=9, color=line_color,
+            marker=dict(size=10, color=line_color,
                         line=dict(color="white", width=2)),
             text=line_vals.apply(lambda v: f"<b>{v:.1f}{line_unit}</b>"),
             textposition="top center",
-            textfont=dict(size=13, color=line_color),
+            textfont=dict(size=15, color=line_color, family="Noto Sans KR"),
             hovertemplate=f"<b>%{{x}}</b><br>{line_label}: %{{y:.1f}}{line_unit}<extra></extra>"
         ), secondary_y=True)
     fig.update_layout(
@@ -1735,8 +1752,8 @@ elif page == "❤ 5.심혈관체크":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
-                    plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#E91E63",
-                                       _rc, "전체이용비중", "#1565C0",
+                    plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#EF5350",
+                                       _rc, "전체이용비중", "#FF6F00",
                                        "심혈관체크 이용자수 + 전체이용비중")
             cf = filter_by_week_range(cardio_users, "주차", p_start, p_end, weeks) if not cardio_users.empty else pd.DataFrame()
             if not cf.empty:
@@ -1781,8 +1798,8 @@ elif page == "❤ 5.심혈관체크":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
-                    plot_bar_rate_dual(ce, _wc, bar_col_use, "검사횟수", "#9C27B0",
-                                       _awc, "1인 주평균", "#FF6F00",
+                    plot_bar_rate_dual(ce, _wc, bar_col_use, "검사횟수", "#EF5350",
+                                       _awc, "1인 주평균", "#455A64",
                                        "심혈관 검사횟수 + 1인 주평균", bar_unit="회", line_unit="회")
             cf = filter_by_week_range(cardio_exam, "주차", p_start, p_end, weeks) if not cardio_exam.empty else pd.DataFrame()
             if not cf.empty:
@@ -1893,7 +1910,7 @@ elif page == "💊 7.복약관리":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
-                    plot_bar_rate_dual(mc_raw, _wc, bar_col_use, "등록건수", "#424242",
+                    plot_bar_rate_dual(mc_raw, _wc, bar_col_use, "등록건수", "#66BB6A",
                                        _rc, "전체이용비중", "#FF6F00",
                                        "활성 이용자 복약 등록건수 + 전체이용비중", bar_unit="건")
         elif not med_count.empty:
@@ -1901,7 +1918,7 @@ elif page == "💊 7.복약관리":
             total = mf.groupby("주차")["값"].sum().reset_index()
             total.columns = ["주차", "등록건수합계"]
             total = shorten_dates_in_df(total, "주차")
-            plot_bar_rate_dual(total, "주차", "등록건수합계", "등록건수", "#424242",
+            plot_bar_rate_dual(total, "주차", "등록건수합계", "등록건수", "#66BB6A",
                                None, None, None,
                                "활성 이용자 복약 등록건수", bar_unit="건")
         else:
@@ -2550,8 +2567,8 @@ elif page == "🃏 10.맞고(와플랫)":
                 mu = filter_by_week_range(mu, _wc, p_start, p_end, weeks)
                 mu = shorten_dates_in_df(mu, _wc)
                 if _sum_col:
-                    plot_bar_rate_dual(mu, _wc, _sum_col, "이용자수", "#FF6F00",
-                                       _rc, "전체이용비중", "#1565C0",
+                    plot_bar_rate_dual(mu, _wc, _sum_col, "이용자수", "#42A5F5",
+                                       _rc, "전체이용비중", "#FF6F00",
                                        "맞고(와플랫) 이용자수 + 전체이용비중")
             if not df.empty:
                 dff = filter_by_week_range(df, "주차", p_start, p_end, weeks)
@@ -2574,8 +2591,8 @@ elif page == "🃏 10.맞고(와플랫)":
                 mp = filter_by_week_range(mp, _wc, p_start, p_end, weeks)
                 mp = shorten_dates_in_df(mp, _wc)
                 if _sum_col:
-                    plot_bar_rate_dual(mp, _wc, _sum_col, "플레이판수", "#E65100",
-                                       _awc, "1인 주평균", "#D32F2F",
+                    plot_bar_rate_dual(mp, _wc, _sum_col, "플레이판수", "#42A5F5",
+                                       _awc, "1인 주평균", "#455A64",
                                        "맞고(와플랫) 플레이판수 + 1인 주평균", bar_unit="판", line_unit="판")
             if not df.empty:
                 dff = filter_by_week_range(df, "주차", p_start, p_end, weeks)
@@ -2689,8 +2706,8 @@ elif page == "😰 6.스트레스체크":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
-                    plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#7B1FA2",
-                                       _rc, "전체이용비중", "#00897B",
+                    plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#AB47BC",
+                                       _rc, "전체이용비중", "#FF6F00",
                                        "스트레스체크 이용자수 + 전체이용비중")
             sf = filter_by_week_range(stress_users, "주차", p_start, p_end, weeks) if not stress_users.empty else pd.DataFrame()
             if not sf.empty:
@@ -2734,8 +2751,8 @@ elif page == "😰 6.스트레스체크":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
-                    plot_bar_rate_dual(se, _wc, bar_col_use, "수행횟수", "#4A148C",
-                                       _awc, "1인 주평균", "#FF6F00",
+                    plot_bar_rate_dual(se, _wc, bar_col_use, "수행횟수", "#AB47BC",
+                                       _awc, "1인 주평균", "#455A64",
                                        "스트레스체크 수행횟수 + 1인 주평균", bar_unit="회", line_unit="회")
             sf = filter_by_week_range(stress_count, "주차", p_start, p_end, weeks) if not stress_count.empty else pd.DataFrame()
             if not sf.empty:
@@ -3128,8 +3145,8 @@ elif page == "🩺 8.건강상담":
             if week_col and "실제 이용 건수" in health_chart.columns:
                 plot_bar_rate_dual(
                     health_chart, week_col,
-                    bar_col="실제 이용 건수",   bar_label="실제 이용 건수", bar_color="#00897B",
-                    line_col="전체이용비중",    line_label="전체 이용비중", line_color="#E91E63",
+                    bar_col="실제 이용 건수",   bar_label="실제 이용 건수", bar_color="#26C6DA",
+                    line_col="전체이용비중",    line_label="전체 이용비중", line_color="#FF6F00",
                     title="건강상담 이용 건수 & 전체 이용비중",
                     bar_unit="건", line_unit="%",
                 )
@@ -3192,8 +3209,8 @@ elif page == "💬 9.생활상담":
                 if "메뉴클릭건수" in life_chart.columns:
                     plot_bar_rate_dual(
                         life_chart, week_col,
-                        bar_col="메뉴클릭건수",  bar_label="메뉴클릭건수", bar_color="#5D4037",
-                        line_col="전체이용비중", line_label="전체 이용비중", line_color="#E91E63",
+                        bar_col="메뉴클릭건수",  bar_label="메뉴클릭건수", bar_color="#8D6E63",
+                        line_col="전체이용비중", line_label="전체 이용비중", line_color="#FF6F00",
                         title="생활상담 메뉴클릭건수 & 전체 이용비중",
                         bar_unit="건", line_unit="%",
                     )
