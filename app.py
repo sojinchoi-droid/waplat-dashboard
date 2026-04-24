@@ -2798,40 +2798,6 @@ elif page == "🤖 AI 생활지원사":
                         )
                 st.markdown("---")
 
-                # ── 통합 추이 차트 ─────────────────────────────────────────
-                if not agg_df.empty:
-                    st.markdown("#### 📊 통합 주차별 참여율 추이")
-                    AGG_COLORS = {
-                        "intro(%)":            ("#212121", "인트로 참여율"),
-                        "service proposal(%)": ("#757575", "서비스 제안율"),
-                        "program(%)":          ("#BDBDBD", "프로그램 완료율"),
-                    }
-                    fig_agg = go.Figure()
-                    for m_col, (color, m_label) in AGG_COLORS.items():
-                        if m_col not in agg_df.columns:
-                            continue
-                        vals = agg_df[m_col].apply(safe_numeric)
-                        fig_agg.add_trace(go.Bar(
-                            x=agg_df["기간"], y=vals,
-                            name=m_label,
-                            marker_color=color,
-                            text=vals.apply(lambda v: f"{v:.0f}%" if v > 0 else ""),
-                            textposition="outside",
-                            textfont=dict(size=16),
-                            hovertemplate=f"<b>%{{x}}</b><br>{m_label}: <b>%{{y:.1f}}%</b><extra></extra>",
-                        ))
-                    fig_agg.update_layout(
-                        height=440,
-                        barmode="group",
-                        bargap=0.2,
-                        hovermode="x unified",
-                        xaxis=dict(type="category", title=""),
-                        yaxis=dict(title="참여율 (%)", range=[0, 110]),
-                        legend=LEGEND_BELOW,
-                        margin=dict(t=30, b=100),
-                    )
-                    st.plotly_chart(fig_agg, use_container_width=True)
-                    st.markdown("---")
 
                 # ── 최신 주차 요약 ──────────────────────────────────────────
                 latest_period = periods[-1] if periods else None
