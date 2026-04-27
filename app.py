@@ -3311,9 +3311,11 @@ elif page == "🩺 8.건강상담":
                 )
                 st.plotly_chart(fig_stack, use_container_width=True)
 
-                # ② 최신 주차 지자체별 현황 (해당 주 전체 일별 데이터 합산)
+                # ② 실제 데이터가 있는 가장 최근 주차 기준 지자체별 현황
                 if not hc_filtered.empty and week_order:
-                    latest_week = week_order[-1]  # 날짜 정렬 기준 가장 최근 주차
+                    _weeks_with_data = [w for w in reversed(week_order)
+                                        if w in hc_filtered["주차"].values]
+                    latest_week = _weeks_with_data[0] if _weeks_with_data else None
                     if latest_week:
                         latest_hc = hc_filtered[hc_filtered["주차"] == latest_week].groupby("지자체")[SERVICE_COLS_HC].sum().reset_index()
                         latest_hc["합계"] = latest_hc[SERVICE_COLS_HC].sum(axis=1)
