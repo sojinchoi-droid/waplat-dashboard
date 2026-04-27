@@ -3269,18 +3269,28 @@ elif page == "🩺 8.건강상담":
                 hc_mun = hc_mun.copy()
                 hc_mun["주차"] = hc_mun["날짜"].apply(date_to_week_label)
 
-                # 탭1 기간 선택기(p_start ~ p_end)와 동일한 주차 범위로 필터링
-                hc_filtered = filter_by_week_range(hc_mun, "주차", p_start, p_end, weeks)
-                if hc_filtered.empty:
-                    hc_filtered = hc_mun.copy()  # fallback: 전체 데이터
+                # ── 탭1과 동일한 X축(주차 범위) 계산 ──
+                if p_start and p_end and weeks:
+                    _s = weeks.index(p_start) if p_start in weeks else 0
+                    _e = weeks.index(p_end)   if p_end   in weeks else len(weeks) - 1
+                    week_order = weeks[_s:_e + 1]           # 탭1과 동일한 전체 주차 목록
+                    hc_filtered = hc_mun[hc_mun["주차"].isin(set(week_order))].copy()
+                else:
+                    _tmp = hc_mun.sort_values("날짜")
+                    week_order = list(dict.fromkeys(_tmp["주차"].tolist()))
+                    hc_filtered = hc_mun.copy()
+
+                if hc_filtered.empty and not hc_mun.empty:
+                    hc_filtered = hc_mun.copy()             # fallback: 전체 데이터
 
                 # ① 주차별 서비스 유형 스택 바 (전체 합산 — 일별 데이터를 주 단위로 집계)
-                hc_filtered_sorted = hc_filtered.sort_values("날짜")
-                week_order = list(dict.fromkeys(hc_filtered_sorted["주차"].tolist()))
                 hc_week = hc_filtered.groupby("주차")[SERVICE_COLS_HC].sum().reset_index()
+                # 탭1 X축과 동일하게: 데이터 없는 주차도 0으로 채워 표시
                 if week_order:
+                    _all_w = pd.DataFrame({"주차": week_order})
+                    hc_week = _all_w.merge(hc_week, on="주차", how="left").fillna(0)
                     hc_week["주차"] = pd.Categorical(hc_week["주차"], categories=week_order, ordered=True)
-                hc_week = hc_week.sort_values("주차")
+                    hc_week = hc_week.sort_values("주차")
 
                 fig_stack = go.Figure()
                 for sc in SERVICE_COLS_HC:
