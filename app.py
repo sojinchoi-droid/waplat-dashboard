@@ -3354,6 +3354,10 @@ elif page == "🩺 8.건강상담":
                 hc_line = hc_filtered.groupby(["주차", "지자체"])[SERVICE_COLS_HC].sum().reset_index()
                 hc_line["합계"] = hc_line[SERVICE_COLS_HC].sum(axis=1)
                 if sel_svc in hc_line.columns:
+                    # 선택 서비스에서 값이 하나라도 있는 지자체만 표시 (hover 정리)
+                    _nonzero = hc_line.groupby("지자체")[sel_svc].sum()
+                    _active_muns = _nonzero[_nonzero > 0].index.tolist()
+                    hc_line = hc_line[hc_line["지자체"].isin(_active_muns)]
                     # 주차 정렬 순서 유지 (이미 계산된 week_order 재사용)
                     week_order2 = week_order
                     hc_line["주차"] = pd.Categorical(hc_line["주차"], categories=week_order2, ordered=True)
