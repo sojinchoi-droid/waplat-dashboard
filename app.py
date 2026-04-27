@@ -1796,7 +1796,7 @@ elif page == "❤ 5.심혈관체크":
 
     p_start, p_end = page_week_range_selector("cardio", weeks)
 
-    tab1, tab2, tab3 = st.tabs(["이용자수 추이", "검사횟수 추이", "지자체별 이용자비중 추이"])
+    tab1, tab2 = st.tabs(["이용자수 추이", "검사횟수 추이"])
 
     with tab1:
         cardio_users = data.get("weekly_심혈관이용자", pd.DataFrame())
@@ -1832,7 +1832,6 @@ elif page == "❤ 5.심혈관체크":
                 # 이용자수 → 이용률 (주차별 지자체 가입완료 회원 대비 %)
                 _wrm = data.get("weekly_registered_by_mun", pd.DataFrame())
                 if not _wrm.empty:
-                    # (주차, 지자체명) → 가입완료 dict
                     _reg_week_map = {(str(r["주차"]).strip(), str(r["지자체명"]).strip()): safe_numeric(r["가입완료"])
                                      for _, r in _wrm.iterrows()}
                     cf = cf.copy()
@@ -1843,6 +1842,16 @@ elif page == "❤ 5.심혈관체크":
                     plot_municipality_lines(cf, "지자체별 심혈관체크 이용률 추이 (가입회원 대비 %)", metric_label="이용률(%)")
                 else:
                     plot_municipality_lines(cf, "지자체별 심혈관체크 이용자 추이", metric_label="이용자수")
+            # ── 지자체별 이용자비중 추이 (AI~BK열) ──────────────────────────
+            st.markdown("---")
+            mrt_cardio = extract_mun_ratio_trend(cardio_user_raw)
+            if not mrt_cardio.empty:
+                mrt_cardio = filter_by_week_range(mrt_cardio, "주차", p_start, p_end, weeks)
+                _active_c = mrt_cardio.groupby("지자체명")["값"].sum()
+                _active_c = _active_c[_active_c > 0].index.tolist()
+                mrt_cardio = mrt_cardio[mrt_cardio["지자체명"].isin(_active_c)]
+                if not mrt_cardio.empty:
+                    plot_municipality_lines(mrt_cardio, "지자체별 심혈관체크 이용자비중 추이 (%)", metric_label="이용자비중(%)")
         else:
             st.info("심혈관 이용자 데이터가 없습니다.")
 
@@ -1878,22 +1887,6 @@ elif page == "❤ 5.심혈관체크":
                 plot_municipality_lines(cf, "지자체별 심혈관 검사횟수 추이", metric_label="검사횟수")
         else:
             st.info("심혈관 검사횟수 데이터가 없습니다.")
-
-    with tab3:
-        cardio_raw = sheets.get("심혈관이용자", pd.DataFrame())
-        mrt_cardio = extract_mun_ratio_trend(cardio_raw)
-        if not mrt_cardio.empty:
-            mrt_cardio = filter_by_week_range(mrt_cardio, "주차", p_start, p_end, weeks)
-            # 선택 기간 내 값이 있는 지자체만 표시
-            _active = mrt_cardio.groupby("지자체명")["값"].sum()
-            _active = _active[_active > 0].index.tolist()
-            mrt_cardio = mrt_cardio[mrt_cardio["지자체명"].isin(_active)]
-            if not mrt_cardio.empty:
-                plot_municipality_lines(mrt_cardio, "지자체별 심혈관체크 이용자비중 추이 (%)", metric_label="이용자비중(%)")
-            else:
-                st.info("선택 기간 내 이용자비중 데이터가 없습니다.")
-        else:
-            st.info("심혈관체크 이용자비중 데이터가 없습니다.")
 
 
 # ============================================================
@@ -2801,7 +2794,7 @@ elif page == "😰 6.스트레스체크":
     st.markdown('<div class="section-header">😰 스트레스체크</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("stress", weeks)
 
-    tab1, tab2, tab3 = st.tabs(["이용자수 추이", "수행횟수 추이", "지자체별 이용자비중 추이"])
+    tab1, tab2 = st.tabs(["이용자수 추이", "수행횟수 추이"])
 
     with tab1:
         stress_users = data.get("weekly_스트레스이용자", pd.DataFrame())
@@ -2845,6 +2838,16 @@ elif page == "😰 6.스트레스체크":
                     plot_municipality_lines(sf, "지자체별 스트레스체크 이용률 추이 (가입회원 대비 %)", metric_label="이용률(%)")
                 else:
                     plot_municipality_lines(sf, "지자체별 스트레스체크 이용자 추이", metric_label="이용자수")
+            # ── 지자체별 이용자비중 추이 (AI~BK열) ──────────────────────────
+            st.markdown("---")
+            mrt_stress = extract_mun_ratio_trend(stress_user_raw)
+            if not mrt_stress.empty:
+                mrt_stress = filter_by_week_range(mrt_stress, "주차", p_start, p_end, weeks)
+                _active_s = mrt_stress.groupby("지자체명")["값"].sum()
+                _active_s = _active_s[_active_s > 0].index.tolist()
+                mrt_stress = mrt_stress[mrt_stress["지자체명"].isin(_active_s)]
+                if not mrt_stress.empty:
+                    plot_municipality_lines(mrt_stress, "지자체별 스트레스체크 이용자비중 추이 (%)", metric_label="이용자비중(%)")
         else:
             st.info("스트레스체크 이용자 데이터가 없습니다.")
 
@@ -2881,20 +2884,6 @@ elif page == "😰 6.스트레스체크":
         else:
             st.info("스트레스체크 수행횟수 데이터가 없습니다.")
 
-    with tab3:
-        stress_raw = sheets.get("스트레스이용자", pd.DataFrame())
-        mrt_stress = extract_mun_ratio_trend(stress_raw)
-        if not mrt_stress.empty:
-            mrt_stress = filter_by_week_range(mrt_stress, "주차", p_start, p_end, weeks)
-            _active_s = mrt_stress.groupby("지자체명")["값"].sum()
-            _active_s = _active_s[_active_s > 0].index.tolist()
-            mrt_stress = mrt_stress[mrt_stress["지자체명"].isin(_active_s)]
-            if not mrt_stress.empty:
-                plot_municipality_lines(mrt_stress, "지자체별 스트레스체크 이용자비중 추이 (%)", metric_label="이용자비중(%)")
-            else:
-                st.info("선택 기간 내 이용자비중 데이터가 없습니다.")
-        else:
-            st.info("스트레스체크 이용자비중 데이터가 없습니다.")
 
 
 # ============================================================
