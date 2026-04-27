@@ -2687,6 +2687,16 @@ elif page == "🃏 10.맞고(와플랫)":
             if not df.empty:
                 dff = filter_by_week_range(df, "주차", p_start, p_end, weeks)
                 plot_municipality_lines(dff, "지자체별 맞고 이용자수", metric_label="이용자수")
+            # ── 지자체별 이용자비중 추이 (AI~BK열) ──────────────────────────
+            st.markdown("---")
+            mrt_matgo = extract_mun_ratio_trend(matgo_user_raw)
+            if not mrt_matgo.empty:
+                mrt_matgo = filter_by_week_range(mrt_matgo, "주차", p_start, p_end, weeks)
+                _active_m = mrt_matgo.groupby("지자체명")["값"].sum()
+                _active_m = _active_m[_active_m > 0].index.tolist()
+                mrt_matgo = mrt_matgo[mrt_matgo["지자체명"].isin(_active_m)]
+                if not mrt_matgo.empty:
+                    plot_municipality_lines(mrt_matgo, "지자체별 맞고(와플랫) 이용자비중 추이 (%)", metric_label="이용자비중(%)")
         else:
             st.info("데이터 없음")
 
