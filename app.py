@@ -3269,21 +3269,10 @@ elif page == "🩺 8.건강상담":
                 hc_mun = hc_mun.copy()
                 hc_mun["주차"] = hc_mun["날짜"].apply(date_to_week_label)
 
-                _raw_dates_hc = hc_mun["날짜"].dropna().unique().tolist()
-                all_dates_hc = sorted([d for d in _raw_dates_hc
-                                       if str(d).strip() not in ("", "nan", "None")])
-
-                with st.expander("📅 기간 선택 (펼쳐서 변경)", expanded=False):
-                    hc_sel_start = st.selectbox("시작", all_dates_hc,
-                                                index=max(0, len(all_dates_hc) - 28),
-                                                key="hc_mun_start")
-                    hc_sel_end   = st.selectbox("종료", all_dates_hc,
-                                                index=len(all_dates_hc) - 1,
-                                                key="hc_mun_end")
-
-                hc_filtered = hc_mun[
-                    (hc_mun["날짜"] >= hc_sel_start) & (hc_mun["날짜"] <= hc_sel_end)
-                ].copy()
+                # 탭1 기간 선택기(p_start ~ p_end)와 동일한 주차 범위로 필터링
+                hc_filtered = filter_by_week_range(hc_mun, "주차", p_start, p_end, weeks)
+                if hc_filtered.empty:
+                    hc_filtered = hc_mun.copy()  # fallback: 전체 데이터
 
                 # ① 주차별 서비스 유형 스택 바 (전체 합산 — 일별 데이터를 주 단위로 집계)
                 hc_filtered_sorted = hc_filtered.sort_values("날짜")
