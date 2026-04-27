@@ -856,7 +856,7 @@ def get_health_consult_by_municipality(sheets: dict) -> pd.DataFrame:
         df[c] = df[c].apply(safe_numeric)
 
     df["합계"] = df[SERVICE_COLS].sum(axis=1)
-    df = df[df["합계"] > 0]  # 빈 행 제거
+    # 비영 필터 제거 — 0인 행도 포함하여 주차별 집계 시 모든 일별 데이터 반영
 
     return df[["날짜", "지자체"] + SERVICE_COLS + ["합계"]].reset_index(drop=True)
 
