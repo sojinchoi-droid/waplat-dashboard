@@ -621,6 +621,37 @@ def plot_bar_rate_dual(df, x_col, bar_col, bar_label, bar_color,
     st.plotly_chart(fig, use_container_width=True)
 
 
+def extract_mun_ratio_trend(raw_df: pd.DataFrame) -> pd.DataFrame:
+    """시트 원본에서 이용자비중 컬럼(AI~BK)을 (주차, 지자체명, 값) long format으로 변환"""
+    if raw_df.empty:
+        return pd.DataFrame()
+    week_col = next((c for c in raw_df.columns if "주차" in str(c)), None)
+    if week_col is None:
+        return pd.DataFrame()
+    ratio_cols = [c for c in raw_df.columns if "이용자비중" in str(c)]
+    if not ratio_cols:
+        return pd.DataFrame()
+
+    sub = raw_df[[week_col] + ratio_cols].copy()
+    sub = sub[~sub[week_col].astype(str).str.strip().isin(["", "nan"])]
+    sub[week_col] = sub[week_col].astype(str).str.strip()
+    for col in ratio_cols:
+        sub[col] = sub[col].apply(safe_numeric)
+
+    long = sub.melt(id_vars=[week_col], value_vars=ratio_cols,
+                    var_name="_col", value_name="값")
+
+    def _mun_name(s):
+        s = str(s).strip()
+        # "경남사회서비스원 이용자비중\n이용자비중" 등 중복 제거
+        s = s.replace("\n이용자비중", "").replace(" 이용자비중", "")
+        return s.strip()
+
+    long["지자체명"] = long["_col"].apply(_mun_name)
+    long = long.rename(columns={week_col: "주차"})
+    return long[["주차", "지자체명", "값"]].reset_index(drop=True)
+
+
 def plot_municipality_bar(df, value_col, title, color_map=None, height=400):
     """지자체별 바 차트 (내림차순 정렬)"""
     df_sorted = df.sort_values(value_col, ascending=True)
@@ -1765,7 +1796,7 @@ elif page == "❤ 5.심혈관체크":
 
     p_start, p_end = page_week_range_selector("cardio", weeks)
 
-    tab1, tab2 = st.tabs(["이용자수 추이", "검사횟수 추이"])
+    tab1, tab2, tab3 = st.tabs(["이용자수 추이", "검사횟수 추이", "지자체별 이용자비중 추이"])
 
     with tab1:
         cardio_users = data.get("weekly_심혈관이용자", pd.DataFrame())
@@ -1847,6 +1878,22 @@ elif page == "❤ 5.심혈관체크":
                 plot_municipality_lines(cf, "지자체별 심혈관 검사횟수 추이", metric_label="검사횟수")
         else:
             st.info("심혈관 검사횟수 데이터가 없습니다.")
+
+    with tab3:
+        cardio_raw = sheets.get("심혈관이용자", pd.DataFrame())
+        mrt_cardio = extract_mun_ratio_trend(cardio_raw)
+        if not mrt_cardio.empty:
+            mrt_cardio = filter_by_week_range(mrt_cardio, "주차", p_start, p_end, weeks)
+            # 선택 기간 내 값이 있는 지자체만 표시
+            _active = mrt_cardio.groupby("지자체명")["값"].sum()
+            _active = _active[_active > 0].index.tolist()
+            mrt_cardio = mrt_cardio[mrt_cardio["지자체명"].isin(_active)]
+            if not mrt_cardio.empty:
+                plot_municipality_lines(mrt_cardio, "지자체별 심혈관체크 이용자비중 추이 (%)", metric_label="이용자비중(%)")
+            else:
+                st.info("선택 기간 내 이용자비중 데이터가 없습니다.")
+        else:
+            st.info("심혈관체크 이용자비중 데이터가 없습니다.")
 
 
 # ============================================================
@@ -2754,7 +2801,7 @@ elif page == "😰 6.스트레스체크":
     st.markdown('<div class="section-header">😰 스트레스체크</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("stress", weeks)
 
-    tab1, tab2 = st.tabs(["이용자수 추이", "수행횟수 추이"])
+    tab1, tab2, tab3 = st.tabs(["이용자수 추이", "수행횟수 추이", "지자체별 이용자비중 추이"])
 
     with tab1:
         stress_users = data.get("weekly_스트레스이용자", pd.DataFrame())
@@ -2833,6 +2880,21 @@ elif page == "😰 6.스트레스체크":
                 plot_municipality_lines(sf, "지자체별 스트레스체크 수행횟수 추이", metric_label="수행횟수")
         else:
             st.info("스트레스체크 수행횟수 데이터가 없습니다.")
+
+    with tab3:
+        stress_raw = sheets.get("스트레스이용자", pd.DataFrame())
+        mrt_stress = extract_mun_ratio_trend(stress_raw)
+        if not mrt_stress.empty:
+            mrt_stress = filter_by_week_range(mrt_stress, "주차", p_start, p_end, weeks)
+            _active_s = mrt_stress.groupby("지자체명")["값"].sum()
+            _active_s = _active_s[_active_s > 0].index.tolist()
+            mrt_stress = mrt_stress[mrt_stress["지자체명"].isin(_active_s)]
+            if not mrt_stress.empty:
+                plot_municipality_lines(mrt_stress, "지자체별 스트레스체크 이용자비중 추이 (%)", metric_label="이용자비중(%)")
+            else:
+                st.info("선택 기간 내 이용자비중 데이터가 없습니다.")
+        else:
+            st.info("스트레스체크 이용자비중 데이터가 없습니다.")
 
 
 # ============================================================
