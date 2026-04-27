@@ -2060,7 +2060,7 @@ elif page == "📊 3.안부체크율":
         cr = checkin_rate[checkin_rate["안부체크율"].notna()].copy()
         cr["권역"] = cr["지자체명"].map(DETAIL_REGION).fillna("기타")
 
-        # 📅 날짜 기간 선택기 (기본: 최근 16주)
+        # 📅 날짜 기간 선택기 — 원본 날짜 전체 기준 (dedup 이전)
         all_dates = sorted(cr["시작일"].unique())
         default_idx = max(0, len(all_dates) - 16)  # 최근 16주 기본 표시
 
@@ -2077,6 +2077,10 @@ elif page == "📊 3.안부체크율":
         # 기간 필터 적용 (날짜 원본으로 필터링 후, 시간순 정렬 → 주차 레이블 변환)
         cr = cr[(cr["시작일"] >= cr_date_start) & (cr["시작일"] <= cr_date_end)]
         cr = cr.sort_values("시작일")
+        # ── 일별 → 주차 단위 중복 제거 (같은 주 같은 지자체는 마지막 행만 유지) ──
+        cr["_week_key"] = cr["시작일"].apply(date_to_week_label)
+        cr = cr.drop_duplicates(subset=["_week_key", "지자체명"], keep="last")
+        cr = cr.drop(columns=["_week_key"])
         cr = week_label_df(cr, "시작일")
 
         # 현재 활성 지자체만 필터링 (계약 종료된 마포구청 등 제외)
@@ -2102,6 +2106,8 @@ elif page == "📊 3.안부체크율":
                 if dates:
                     latest_date = dates[-1]
                     latest_data = cr[cr["시작일"] == latest_date].copy()
+                    # 같은 주차 내 동일 지자체 중복 제거 (가장 최근 원본 날짜 기준 마지막 행 유지)
+                    latest_data = latest_data.drop_duplicates(subset="지자체명", keep="last")
                     latest_data = latest_data.sort_values("안부체크율", ascending=True)
 
                     st.markdown(f"**{latest_date} 기준**")
@@ -2146,7 +2152,9 @@ elif page == "📊 3.안부체크율":
                 # 해당 권역 최신 바 차트
                 dates = list(dict.fromkeys(region_data["시작일"].tolist()))  # 시간순 정렬 보존
                 if dates:
-                    latest = region_data[region_data["시작일"] == dates[-1]].sort_values("안부체크율", ascending=True)
+                    latest = (region_data[region_data["시작일"] == dates[-1]]
+                              .drop_duplicates(subset="지자체명", keep="last")
+                              .sort_values("안부체크율", ascending=True))
                     fig2 = px.bar(latest, y="지자체명", x="안부체크율", orientation="h",
                                   color_discrete_sequence=[REGION_COLORS.get(region, "#666")],
                                   height=min(400, max(200, len(latest) * 26)))
@@ -3235,8 +3243,18 @@ elif page == "🩺 8.건강상담":
 
         # ── 탭 2: 지자체별 서비스 유형별 현황 ────────────────────────────
         with tab2:
+            # 캐시 데이터가 비어있으면 직접 재시도
             if hc_mun.empty:
-                st.info("지자체별 서비스 데이터가 없습니다. (건강상담지자체 시트 확인)")
+                with st.spinner("건강상담 지자체 데이터 로딩 중..."):
+                    try:
+                        from sheets_data import fetch_sheet, get_health_consult_by_municipality as _get_hc_mun
+                        _raw = fetch_sheet("867975933")
+                        if not _raw.empty:
+                            hc_mun = _get_hc_mun({"건강상담지자체": _raw})
+                    except Exception as _e:
+                        st.error(f"데이터 로딩 오류: {_e}")
+            if hc_mun.empty:
+                st.info("건강상담 지자체 서비스 이용 데이터가 아직 없습니다.")
             else:
                 SERVICE_COLS_HC = [c for c in ["전문의료진상담", "병원안내", "일반상담", "진료예약"]
                                    if c in hc_mun.columns]
@@ -3247,12 +3265,17 @@ elif page == "🩺 8.건강상담":
                     "진료예약":       "#FF6F00",
                 }
 
-                all_dates_hc = sorted(hc_mun["날짜"].unique().tolist())
-                recent_dates_hc = all_dates_hc[-16:] if len(all_dates_hc) > 16 else all_dates_hc
+                # 일별 날짜 → ISO 주차 레이블 추가 (2026-04-13 → "26-16")
+                hc_mun = hc_mun.copy()
+                hc_mun["주차"] = hc_mun["날짜"].apply(date_to_week_label)
+
+                _raw_dates_hc = hc_mun["날짜"].dropna().unique().tolist()
+                all_dates_hc = sorted([d for d in _raw_dates_hc
+                                       if str(d).strip() not in ("", "nan", "None")])
 
                 with st.expander("📅 기간 선택 (펼쳐서 변경)", expanded=False):
                     hc_sel_start = st.selectbox("시작", all_dates_hc,
-                                                index=max(0, len(all_dates_hc) - 16),
+                                                index=max(0, len(all_dates_hc) - 28),
                                                 key="hc_mun_start")
                     hc_sel_end   = st.selectbox("종료", all_dates_hc,
                                                 index=len(all_dates_hc) - 1,
@@ -3262,14 +3285,18 @@ elif page == "🩺 8.건강상담":
                     (hc_mun["날짜"] >= hc_sel_start) & (hc_mun["날짜"] <= hc_sel_end)
                 ].copy()
 
-                # ① 주차별 서비스 유형 스택 바 (전체 합산)
-                hc_week = hc_filtered.groupby("날짜")[SERVICE_COLS_HC].sum().reset_index()
-                hc_week = hc_week.sort_values("날짜")
+                # ① 주차별 서비스 유형 스택 바 (전체 합산 — 일별 데이터를 주 단위로 집계)
+                hc_filtered_sorted = hc_filtered.sort_values("날짜")
+                week_order = list(dict.fromkeys(hc_filtered_sorted["주차"].tolist()))
+                hc_week = hc_filtered.groupby("주차")[SERVICE_COLS_HC].sum().reset_index()
+                if week_order:
+                    hc_week["주차"] = pd.Categorical(hc_week["주차"], categories=week_order, ordered=True)
+                hc_week = hc_week.sort_values("주차")
 
                 fig_stack = go.Figure()
                 for sc in SERVICE_COLS_HC:
                     fig_stack.add_trace(go.Bar(
-                        x=hc_week["날짜"], y=hc_week[sc], name=sc,
+                        x=hc_week["주차"].astype(str), y=hc_week[sc], name=sc,
                         marker_color=SERVICE_COLORS_HC.get(sc, "#999"),
                         text=hc_week[sc].apply(lambda v: f"{int(v)}" if v > 0 else ""),
                         textposition="inside", textfont=dict(size=11, color="white"),
@@ -3285,40 +3312,53 @@ elif page == "🩺 8.건강상담":
                 )
                 st.plotly_chart(fig_stack, use_container_width=True)
 
-                # ② 최신 주차 지자체별 현황
-                if all_dates_hc:
-                    latest_hc = hc_filtered[hc_filtered["날짜"] == hc_filtered["날짜"].max()].copy()
-                    st.markdown(f"**📌 {latest_hc['날짜'].iloc[0]} 기준 지자체별 현황**")
-                    latest_hc = latest_hc.sort_values("합계", ascending=True)
-                    fig_mun_hc = go.Figure()
-                    for sc in SERVICE_COLS_HC:
-                        fig_mun_hc.add_trace(go.Bar(
-                            y=latest_hc["지자체"], x=latest_hc[sc],
-                            name=sc, orientation="h",
-                            marker_color=SERVICE_COLORS_HC.get(sc, "#999"),
-                            text=latest_hc[sc].apply(lambda v: f"{int(v)}" if v > 0 else ""),
-                            textposition="inside", textfont=dict(size=11, color="white"),
-                            hovertemplate=f"<b>%{{y}}</b><br>{sc}: %{{x:,}}건<extra></extra>",
-                        ))
-                    fig_mun_hc.update_layout(
-                        barmode="stack",
-                        title="지자체별 서비스 유형별 이용건수",
-                        height=max(350, len(latest_hc) * 32),
-                        xaxis=dict(title="이용건수"),
-                        yaxis=dict(title=""),
-                        legend=LEGEND_BELOW, margin=dict(t=45, b=90),
-                    )
-                    st.plotly_chart(fig_mun_hc, use_container_width=True)
+                # ② 최신 주차 지자체별 현황 (해당 주 전체 일별 데이터 합산)
+                if not hc_filtered.empty and week_order:
+                    latest_week = week_order[-1]  # 날짜 정렬 기준 가장 최근 주차
+                    if latest_week:
+                        latest_hc = hc_filtered[hc_filtered["주차"] == latest_week].groupby("지자체")[SERVICE_COLS_HC].sum().reset_index()
+                        latest_hc["합계"] = latest_hc[SERVICE_COLS_HC].sum(axis=1)
+                        latest_hc = latest_hc[latest_hc["합계"] > 0].sort_values("합계", ascending=True)
+                        if not latest_hc.empty:
+                            st.markdown(f"**📌 {latest_week} 기준 지자체별 서비스 이용현황** (이용 있는 지자체만 표시)")
+                            fig_mun_hc = go.Figure()
+                            for sc in SERVICE_COLS_HC:
+                                fig_mun_hc.add_trace(go.Bar(
+                                    y=latest_hc["지자체"], x=latest_hc[sc],
+                                    name=sc, orientation="h",
+                                    marker_color=SERVICE_COLORS_HC.get(sc, "#999"),
+                                    text=latest_hc[sc].apply(lambda v: f"{int(v)}" if v > 0 else ""),
+                                    textposition="inside", textfont=dict(size=11, color="white"),
+                                    hovertemplate=f"<b>%{{y}}</b><br>{sc}: %{{x:,}}건<extra></extra>",
+                                ))
+                            fig_mun_hc.update_layout(
+                                barmode="stack",
+                                title=f"지자체별 서비스 유형별 이용건수 ({latest_week})",
+                                height=max(300, len(latest_hc) * 38),
+                                xaxis=dict(title="이용건수"),
+                                yaxis=dict(title=""),
+                                legend=LEGEND_BELOW, margin=dict(t=45, b=90),
+                            )
+                            st.plotly_chart(fig_mun_hc, use_container_width=True)
+                        else:
+                            st.info(f"📭 {latest_week} 주차에는 이용 데이터가 없습니다.")
 
-                # ③ 지자체별 주차별 라인 차트 (서비스 유형 선택)
+                # ③ 지자체별 주차별 라인 차트 (서비스 유형 선택 — 주 단위 집계)
                 st.markdown("---")
                 sel_svc = st.selectbox("📊 서비스 유형별 지자체 추이",
                                        SERVICE_COLS_HC + ["합계"],
                                        key="hc_svc_select")
-                if sel_svc in hc_filtered.columns:
+                svc_col = sel_svc if sel_svc != "합계" else None
+                _svc_agg = sel_svc if sel_svc in SERVICE_COLS_HC else SERVICE_COLS_HC
+                hc_line = hc_filtered.groupby(["주차", "지자체"])[SERVICE_COLS_HC].sum().reset_index()
+                hc_line["합계"] = hc_line[SERVICE_COLS_HC].sum(axis=1)
+                if sel_svc in hc_line.columns:
+                    # 주차 정렬 순서 유지 (이미 계산된 week_order 재사용)
+                    week_order2 = week_order
+                    hc_line["주차"] = pd.Categorical(hc_line["주차"], categories=week_order2, ordered=True)
+                    hc_line = hc_line.sort_values(["주차", "지자체"])
                     fig_line = px.line(
-                        hc_filtered.sort_values("날짜"),
-                        x="날짜", y=sel_svc, color="지자체",
+                        hc_line, x="주차", y=sel_svc, color="지자체",
                         markers=True,
                         color_discrete_sequence=px.colors.qualitative.Set2,
                         title=f"지자체별 {sel_svc} 주간 추이",

@@ -836,11 +836,20 @@ def get_health_consult_by_municipality(sheets: dict) -> pd.DataFrame:
     SERVICE_COLS = [c for c in ["전문의료진상담", "병원안내", "일반상담", "진료예약"]
                     if c in df.columns]
 
-    # 날짜/지자체 비어있는 행 제거
-    df["날짜"]   = df["날짜"].astype(str).str.strip()
+    # 날짜/지자체 비어있는 행 제거 + 날짜 포맷 정규화 (20260413 → 2026-04-13)
+    def _normalize_date(v):
+        s = str(v).strip().split(".")[0]  # float "20260413.0" → "20260413"
+        if len(s) == 8 and s.isdigit():
+            return f"{s[:4]}-{s[4:6]}-{s[6:]}"  # YYYYMMDD → YYYY-MM-DD
+        return s
+
+    df["날짜"]   = df["날짜"].apply(_normalize_date)
     df["지자체"] = df["지자체"].astype(str).str.strip()
+    # 합계/소계/합산 행 제거 (시트 내 집계 행)
+    _exclude = {"합계", "소계", "합산", "total", "sum"}
     df = df[(df["날짜"] != "") & (df["날짜"] != "nan") &
-            (df["지자체"] != "") & (df["지자체"] != "nan")].copy()
+            (df["지자체"] != "") & (df["지자체"] != "nan") &
+            (~df["지자체"].str.lower().isin(_exclude))].copy()
 
     # 서비스 컬럼 숫자 변환
     for c in SERVICE_COLS:
