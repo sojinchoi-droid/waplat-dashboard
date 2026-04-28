@@ -1641,6 +1641,7 @@ elif page == "🖐 2.안부확인":
             cr_mun = data.get("checkin_municipality_rate", pd.DataFrame())
             if not cr_mun.empty and "안부확인율" in cr_mun.columns:
                 cr_show = cr_mun[cr_mun["안부확인율"].notna() & (cr_mun["안부확인율"] > 0)].copy()
+                cr_show["안부확인율"] = cr_show["안부확인율"].round(1)
                 cr_show = cr_show.sort_values("시작일")
                 if not cr_show.empty:
                     latest_date = cr_show["시작일"].max()
@@ -1665,6 +1666,7 @@ elif page == "🖐 2.안부확인":
                     fig_mun.update_traces(
                         texttemplate="%{x:.1f}%", textposition="outside",
                         textfont=dict(size=12),
+                        hovertemplate="<b>%{y}</b><br>안부확인율: %{x:.1f}%<extra></extra>",
                     )
                     st.plotly_chart(fig_mun, use_container_width=True)
                 else:
@@ -1823,17 +1825,19 @@ elif page == "🖐 2.안부확인":
         cr_base = data.get("checkin_municipality_rate", pd.DataFrame())
         if not cr_base.empty and "안부확인율" in cr_base.columns:
             cr_all = cr_base[cr_base["안부확인율"].notna() & (cr_base["안부확인율"] > 0)].copy()
+            cr_all["안부확인율"] = cr_all["안부확인율"].round(1)
             cr_all = cr_all.sort_values("시작일")
             cr_all = week_label_df(cr_all, "시작일")
             if not cr_all.empty:
                 # ① 전체 평균 추이
-                avg_cr = cr_all.groupby("시작일")["안부확인율"].mean().reset_index()
+                avg_cr = cr_all.groupby("시작일")["안부확인율"].mean().round(1).reset_index()
                 fig = px.line(avg_cr, x="시작일", y="안부확인율", markers=True,
                               color_discrete_sequence=["#2F5496"])
                 fig.update_layout(title="안부확인율 추이 (전체 평균)", height=350,
                                   hovermode="x unified", xaxis=dict(type="category"),
                                   yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
                                   margin=dict(t=40, b=30))
+                fig.update_traces(hovertemplate="<b>%{x}</b><br>평균 안부확인율: %{y:.1f}%<extra></extra>")
                 st.plotly_chart(fig, use_container_width=True)
 
                 # ② 지자체별 안부확인율 — 최신 주차 바 차트
@@ -1858,6 +1862,7 @@ elif page == "🖐 2.안부확인":
                 fig2.update_traces(
                     texttemplate="%{x:.1f}%", textposition="outside",
                     textfont=dict(size=12),
+                    hovertemplate="<b>%{y}</b><br>안부확인율: %{x:.1f}%<extra></extra>",
                 )
                 st.plotly_chart(fig2, use_container_width=True)
             else:
