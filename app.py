@@ -881,18 +881,19 @@ if page == "📋 Summary":
         # KPI 카드
         cols = st.columns(4)
         kpi_data = [
-            ("총 협약인원", total_contract, 0, "명", "metric-card", False),
-            ("총 가입완료", cur_registered, prev_registered, "명", "metric-card-green", False),
-            ("전체 가입률", total_reg_rate, 0, "%", "metric-card", False),
-            ("안부확인율", summary.get("안부확인율", summary.get("안부체크율", 0)), prev_summary.get("안부확인율", prev_summary.get("안부체크율", 0)), "%", "metric-card-orange", False),
+            ("총 협약인원", total_contract, 0, "명", "metric-card", False, ",.0f"),
+            ("총 가입완료", cur_registered, prev_registered, "명", "metric-card-green", False, ",.0f"),
+            ("전체 가입률", total_reg_rate, 0, "%", "metric-card", False, ".1f"),
+            ("안부확인율", round(float(summary.get("안부확인율", summary.get("안부체크율", 0))), 1), round(float(prev_summary.get("안부확인율", prev_summary.get("안부체크율", 0))), 1), "%", "metric-card-orange", False, ".1f"),
         ]
-        for col, (label, val, prev_val, suffix, card_cls, invert) in zip(cols, kpi_data):
+        for col, (label, val, prev_val, suffix, card_cls, invert, fmt) in zip(cols, kpi_data):
             delta = float(val) - float(prev_val) if prev_val else 0
+            val_str = format(val, fmt)
             with col:
                 st.markdown(f"""
                 <div class="{card_cls}">
                     <h3>{label}</h3>
-                    <h1>{val:,.0f}{suffix}</h1>
+                    <h1>{val_str}{suffix}</h1>
                     <p>{delta_html(delta, suffix, invert, prev_val=float(prev_val) if prev_val else 0)}</p>
                 </div>
                 """, unsafe_allow_html=True)
