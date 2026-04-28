@@ -1009,7 +1009,8 @@ if page == "📋 Summary":
                 st.dataframe(safe_display, use_container_width=True, hide_index=True)
 
             # 파일 업로드 + 수동 편집
-            with st.expander("📤 세이프 현황 업데이트 (엑셀 업로드 또는 수동 편집)"):
+            _safe_expander_open = st.session_state.get("safe_expander_open", False)
+            with st.expander("📤 세이프 현황 업데이트 (엑셀 업로드 또는 수동 편집)", expanded=_safe_expander_open):
                 upload_tab, manual_tab = st.tabs(["📁 엑셀 파일 업로드", "✏️ 수동 편집"])
 
                 with upload_tab:
@@ -1017,10 +1018,17 @@ if page == "📋 Summary":
                     st.caption("필수 컬럼: 관제 등록 날짜, 구분, 지자체명, 계약 인원, 전체 등록 이용자, 전체 가입한 이용자")
                     uploaded_file = st.file_uploader("엑셀 파일 업로드 (.xlsx)", type=["xlsx"], key="safe_upload")
 
+                    # 파일이 업로드되면 bytes를 session_state에 보관 (버튼 클릭 후 rerun돼도 유지)
                     if uploaded_file is not None:
+                        st.session_state["safe_upload_bytes"] = uploaded_file.read()
+                        st.session_state["safe_upload_name"] = uploaded_file.name
+                        st.session_state["safe_expander_open"] = True
+
+                    _upload_bytes = st.session_state.get("safe_upload_bytes")
+                    if _upload_bytes is not None:
                         try:
-                            import openpyxl
-                            wb = openpyxl.load_workbook(uploaded_file, data_only=True)
+                            import openpyxl, io
+                            wb = openpyxl.load_workbook(io.BytesIO(_upload_bytes), data_only=True)
                             # Sheet2 (정리된 데이터) 우선, 없으면 Sheet1
                             ws = wb["Sheet2"] if "Sheet2" in wb.sheetnames else wb[wb.sheetnames[0]]
 
@@ -1103,6 +1111,10 @@ if page == "📋 Summary":
                                             _conn2.commit()
                                             _conn2.close()
                                             st.success("✅ 세이프 현황이 업데이트되었습니다!")
+                                            # 업로드 bytes 초기화 — expander는 열린 채 유지
+                                            st.session_state.pop("safe_upload_bytes", None)
+                                            st.session_state.pop("safe_upload_name", None)
+                                            st.session_state["safe_expander_open"] = True
                                             st.rerun()
                                         except Exception as e:
                                             st.error(f"저장 실패: {e}")
