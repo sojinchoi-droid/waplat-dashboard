@@ -542,7 +542,7 @@ LEGEND_BELOW = dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x
 LEGEND_BELOW_LARGE = dict(orientation="h", yanchor="top", y=-0.28, xanchor="center", x=0.5, font=dict(size=8))
 
 # 가입완료 20명 미만 소규모 지자체 — 범례 이름 앞에 ○ 표시
-_SMALL_AGENCIES = {"강원사회서비스원", "희망나래장애인복지관", "양양군청"}
+_SMALL_AGENCIES = {"강원사회서비스원", "희망나래장애인복지관", "희망나래", "양양군청"}
 
 def _mun_label(name: str) -> str:
     return f"○ {name}" if name in _SMALL_AGENCIES else name
