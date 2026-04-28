@@ -678,7 +678,8 @@ def extract_mun_ratio_trend(raw_df: pd.DataFrame) -> pd.DataFrame:
 
 def plot_municipality_bar(df, value_col, title, color_map=None, height=400):
     """지자체별 바 차트 (내림차순 정렬)"""
-    df_sorted = df.sort_values(value_col, ascending=True)
+    df_sorted = df.sort_values(value_col, ascending=True).copy()
+    df_sorted["지자체명"] = df_sorted["지자체명"].apply(_mun_label)
     fig = px.bar(df_sorted, y="지자체명", x=value_col, orientation="h",
                  color="권역" if "권역" in df_sorted.columns else None,
                  color_discrete_map={"수도권": "#2F5496", "비수도권": "#FF6F00", "기관": "#7B1FA2", "기타": "#9E9E9E"},
@@ -1333,7 +1334,9 @@ elif page == "👥 1.회원가입 & 이탈":
                 reg["전체비중"] = (reg["가입완료"] / total_registered * 100).round(1) if total_registered > 0 else 0
                 reg["권역"] = reg["지자체명"].map(REGION_MAP).fillna("기타")
 
-                fig = px.pie(reg, values="가입완료", names="지자체명",
+                reg_pie = reg.copy()
+                reg_pie["지자체명"] = reg_pie["지자체명"].apply(_mun_label)
+                fig = px.pie(reg_pie, values="가입완료", names="지자체명",
                              title="지자체별 회원 비중",
                              color_discrete_sequence=px.colors.qualitative.Set3)
                 fig.update_traces(
@@ -1637,7 +1640,8 @@ elif page == "🖐 2.안부확인":
                     latest_cr = cr_show[cr_show["시작일"] == latest_date].copy()
                     latest_cr = latest_cr.drop_duplicates(subset="지자체명", keep="last")
                     latest_cr["권역"] = latest_cr["지자체명"].map(DETAIL_REGION).fillna("기타")
-                    latest_cr = latest_cr.sort_values("안부확인율", ascending=True)
+                    latest_cr = latest_cr.sort_values("안부확인율", ascending=True).copy()
+                    latest_cr["지자체명"] = latest_cr["지자체명"].apply(_mun_label)
 
                     st.markdown(f"**{latest_date} 기준**")
                     fig_mun = px.bar(
@@ -1830,7 +1834,8 @@ elif page == "🖐 2.안부확인":
                 latest_cr2 = cr_all[cr_all["시작일"] == latest_date2].copy()
                 latest_cr2 = latest_cr2.drop_duplicates(subset="지자체명", keep="last")
                 latest_cr2["권역"] = latest_cr2["지자체명"].map(DETAIL_REGION).fillna("기타")
-                latest_cr2 = latest_cr2.sort_values("안부확인율", ascending=True)
+                latest_cr2 = latest_cr2.sort_values("안부확인율", ascending=True).copy()
+                latest_cr2["지자체명"] = latest_cr2["지자체명"].apply(_mun_label)
                 st.markdown(f"**{latest_date2} 기준**")
                 fig2 = px.bar(
                     latest_cr2, y="지자체명", x="안부확인율", orientation="h",
@@ -2179,7 +2184,8 @@ elif page == "📊 3.안부체크율":
                     latest_data = cr[cr["시작일"] == latest_date].copy()
                     # 같은 주차 내 동일 지자체 중복 제거 (가장 최근 원본 날짜 기준 마지막 행 유지)
                     latest_data = latest_data.drop_duplicates(subset="지자체명", keep="last")
-                    latest_data = latest_data.sort_values("안부체크율", ascending=True)
+                    latest_data = latest_data.sort_values("안부체크율", ascending=True).copy()
+                    latest_data["지자체명"] = latest_data["지자체명"].apply(_mun_label)
 
                     st.markdown(f"**{latest_date} 기준**")
 
@@ -2201,9 +2207,10 @@ elif page == "📊 3.안부체크율":
         # 권역별 탭
         for i, region in enumerate(regions):
             with tabs[i + 1]:
-                region_data = cr[cr["권역"] == region]
+                region_data = cr[cr["권역"] == region].copy()
                 mun_list = region_data["지자체명"].unique().tolist()
                 st.markdown(f"**{region}** — {', '.join(mun_list)}")
+                region_data["지자체명"] = region_data["지자체명"].apply(_mun_label)
 
                 fig = px.line(region_data, x="시작일", y="안부체크율", color="지자체명",
                               markers=True, color_discrete_sequence=px.colors.qualitative.Set2)
@@ -2225,7 +2232,9 @@ elif page == "📊 3.안부체크율":
                 if dates:
                     latest = (region_data[region_data["시작일"] == dates[-1]]
                               .drop_duplicates(subset="지자체명", keep="last")
-                              .sort_values("안부체크율", ascending=True))
+                              .sort_values("안부체크율", ascending=True)
+                              .copy())
+                    latest["지자체명"] = latest["지자체명"].apply(_mun_label)
                     fig2 = px.bar(latest, y="지자체명", x="안부체크율", orientation="h",
                                   color_discrete_sequence=[REGION_COLORS.get(region, "#666")],
                                   height=min(400, max(200, len(latest) * 26)))
@@ -2254,6 +2263,8 @@ elif page == "📊 3.안부체크율":
                 sel_region = st.radio("권역 선택", ["전체"] + sorted(er["권역"].unique().tolist()), horizontal=True, key="extra_region")
                 if sel_region != "전체":
                     er = er[er["권역"] == sel_region]
+                er = er.copy()
+                er["지자체명"] = er["지자체명"].apply(_mun_label)
                 fig3 = px.line(er, x="시작일", y=selected_extra, color="지자체명", markers=True)
                 fig3.update_layout(
                     title=f"지자체별 {selected_extra} 추이", height=400,
@@ -2399,6 +2410,7 @@ elif page == "🔄 4.안부체크 변경":
                     mun_df["_sort"] = pd.to_datetime("20" + mun_df["날짜"], errors="coerce")
                     mun_df = mun_df.sort_values("_sort").drop(columns=["_sort"])
                     sorted_dates = mun_df["날짜"].unique().tolist()
+                    mun_df["지자체명"] = mun_df["지자체명"].apply(_mun_label)
                     fig2 = px.line(mun_df, x="날짜", y="변경건", color="지자체명", markers=True)
                     fig2.update_layout(
                         title="지자체별 안부상태 변경건 추이", height=400,
@@ -2520,7 +2532,8 @@ elif page == "🔄 4.안부체크 변경":
                     # 활성 지자체만 (데이터 있는 것만)
                     active_muns = ctrl_df.groupby("지자체명")["관제수"].sum()
                     active_muns = active_muns[active_muns > 0].index.tolist()
-                    ctrl_df = ctrl_df[ctrl_df["지자체명"].isin(active_muns)]
+                    ctrl_df = ctrl_df[ctrl_df["지자체명"].isin(active_muns)].copy()
+                    ctrl_df["지자체명"] = ctrl_df["지자체명"].apply(_mun_label)
 
                     fig4 = px.bar(ctrl_df, x="날짜", y="관제수", color="지자체명",
                                   barmode="group", height=400)
@@ -2538,7 +2551,8 @@ elif page == "🔄 4.안부체크 변경":
                     active_muns_d = disp_df.groupby("지자체명")["출동수"].sum()
                     active_muns_d = active_muns_d[active_muns_d > 0].index.tolist()
                     if active_muns_d:
-                        disp_df = disp_df[disp_df["지자체명"].isin(active_muns_d)]
+                        disp_df = disp_df[disp_df["지자체명"].isin(active_muns_d)].copy()
+                        disp_df["지자체명"] = disp_df["지자체명"].apply(_mun_label)
                         fig5 = px.bar(disp_df, x="날짜", y="출동수", color="지자체명",
                                       barmode="group", height=400)
                         fig5.update_layout(
