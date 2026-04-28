@@ -541,6 +541,15 @@ def week_label_df(df, col):
 LEGEND_BELOW = dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
 LEGEND_BELOW_LARGE = dict(orientation="h", yanchor="top", y=-0.28, xanchor="center", x=0.5, font=dict(size=8))
 
+# 가입완료 20명 미만 소규모 지자체 — 범례 이름에 취소선 표시
+_SMALL_AGENCIES = {"강원사회서비스원", "희망나래장애인복지관", "양양군청"}
+
+def _mun_label(name: str) -> str:
+    """소규모 지자체 이름에 유니코드 취소선 적용"""
+    if name in _SMALL_AGENCIES:
+        return ''.join(c + '̶' for c in name)
+    return name
+
 def plot_weekly_series(df, x_col, y_col, title, color="#2F5496", height=300):
     """주간 시계열 차트 — 최신 포인트 강조 + 전주 대비 변화 표시"""
     df = shorten_dates_in_df(df, x_col)
@@ -781,7 +790,10 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
         elif view_mode == "Top 5 + Bottom 5":
             df_long = df_long[df_long["지자체명"].isin(top5 + bot5)]
 
-    fig = px.line(df_long, x=x_col, y="값", color="지자체명", markers=True)
+    # 소규모 지자체 이름에 취소선 적용 (필터링 완료 후 표시용 복사본에만 적용)
+    df_plot = df_long.copy()
+    df_plot["지자체명"] = df_plot["지자체명"].apply(_mun_label)
+    fig = px.line(df_plot, x=x_col, y="값", color="지자체명", markers=True)
 
     # 전체 평균 참조선 (점선)
     if show_avg and not df_long.empty:
