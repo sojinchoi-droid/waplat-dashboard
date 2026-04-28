@@ -1040,20 +1040,26 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
             summary["전체회원"] = safe_numeric(latest.get("전체회원", 0))
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
 
-    # 안부확인율: checkin_daily R열 안부미확인률 → 100 - 주차평균 (추이 차트와 동일 방식)
+    # 안부확인율: checkin_daily R열 안부미확인률 → 100 - 주차평균 (추이 차트와 완전 동일 기준)
+    # ISO 주차 레이블(week)로 필터 — 날짜 범위 아닌 동일 week 레이블 사용
     cd_raw = data.get("checkin_daily", pd.DataFrame())
     if not cd_raw.empty and "안부미확인률" in cd_raw.columns and "날짜" in cd_raw.columns:
-        start_date = summary.get("시작일", "")
-        if start_date:
-            try:
-                end_date = (pd.to_datetime(start_date) + pd.Timedelta(days=7)).strftime("%Y-%m-%d")
-                cd_week = cd_raw[
-                    (cd_raw["날짜"].astype(str) >= str(start_date)) &
-                    (cd_raw["날짜"].astype(str) < end_date)
-                ]
-            except Exception:
-                cd_week = cd_raw
-        else:
+        try:
+            from datetime import datetime as _dt
+            def _to_wlabel(d):
+                s = str(d).strip()
+                try:
+                    if len(s) >= 10 and s[4:5] == "-":
+                        dt = _dt.strptime(s[:10], "%Y-%m-%d")
+                        yr, wk, _ = dt.isocalendar()
+                        return f"{str(yr)[2:]}-{wk:02d}"
+                except Exception:
+                    pass
+                return s
+            cd_labeled = cd_raw.copy()
+            cd_labeled["_wk"] = cd_labeled["날짜"].apply(_to_wlabel)
+            cd_week = cd_labeled[cd_labeled["_wk"] == week]
+        except Exception:
             cd_week = cd_raw
         valid_miss = cd_week[cd_week["안부미확인률"].apply(safe_numeric) > 0]
         if not valid_miss.empty:
