@@ -544,8 +544,15 @@ LEGEND_BELOW_LARGE = dict(orientation="h", yanchor="top", y=-0.28, xanchor="cent
 # 가입완료 20명 미만 소규모 지자체 — 범례 이름 앞에 ○ 표시
 _SMALL_AGENCIES = {"강원사회서비스원", "희망나래장애인복지관", "희망나래", "양양군청"}
 
+# 별표 표시 지자체
+_STAR_AGENCIES = {"광명시청", "양평군청", "정선군청", "제주시청", "서귀포시청", "고성군청"}
+
 def _mun_label(name: str) -> str:
-    return f"○ {name}" if name in _SMALL_AGENCIES else name
+    if name in _SMALL_AGENCIES:
+        return f"○ {name}"
+    if name in _STAR_AGENCIES:
+        return f"★ {name}"
+    return name
 
 # 권역 분류 및 색상 (전역 — 여러 페이지에서 공유)
 DETAIL_REGION = {
