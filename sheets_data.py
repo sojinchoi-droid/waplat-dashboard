@@ -1011,6 +1011,33 @@ def build_dashboard_data(sheets: dict) -> dict:
     else:
         result["주차목록"] = []
 
+    # 10. 주차별 안부확인율 사전 계산 (checkin_daily 기반, get_week_summary에서 조회)
+    _cd = result.get("checkin_daily", pd.DataFrame())
+    _wu = result.get("weekly_users", pd.DataFrame())
+    _weekly_cr = {}
+    if not _cd.empty and "안부확인율" in _cd.columns and not _wu.empty:
+        _date_col = next((c for c in _cd.columns
+                          if str(c).replace("\n","").strip().lower() in ("날짜","date","일자","일")
+                          or "날짜" in str(c) or "date" in str(c).lower()), None)
+        if _date_col and "주차" in _wu.columns and "시작일" in _wu.columns:
+            try:
+                _wmap = {}
+                for _, _r in _wu.iterrows():
+                    _rs = pd.to_datetime(str(_r["시작일"]), errors="coerce")
+                    if pd.isna(_rs):
+                        continue
+                    _wk = str(_r["주차"]).strip()
+                    for _i in range(7):
+                        _wmap[(_rs + pd.Timedelta(days=_i)).strftime("%Y-%m-%d")] = _wk
+                _dt = pd.to_datetime(_cd[_date_col].astype(str), errors="coerce")
+                _cd2 = _cd.copy()
+                _cd2["_wk"] = _dt.dt.strftime("%Y-%m-%d").map(_wmap)
+                _cd2 = _cd2[_cd2["_wk"].notna() & (_cd2["안부확인율"] > 0)]
+                _weekly_cr = _cd2.groupby("_wk")["안부확인율"].mean().round(1).to_dict()
+            except Exception:
+                pass
+    result["weekly_안부확인율"] = _weekly_cr
+
     return result
 
 
@@ -1043,30 +1070,11 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
             summary["전체회원"] = safe_numeric(latest.get("전체회원", 0))
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
 
-    # 안부확인율: 추이 차트와 동일한 _wmap 방식 (weekly_users 날짜 범위 기준)
-    cd_raw = data.get("checkin_daily", pd.DataFrame())
-    wu = data.get("weekly_users", pd.DataFrame())
-    if not cd_raw.empty and "안부확인율" in cd_raw.columns:
-        _date_col = next((c for c in cd_raw.columns
-                          if str(c).replace("\n","").strip().lower() in ("날짜","date","일자","일")
-                          or "날짜" in str(c) or "date" in str(c).lower()), None)
-        if _date_col and not wu.empty and "주차" in wu.columns and "시작일" in wu.columns:
-            try:
-                _wmap = {}
-                for _, _r in wu.iterrows():
-                    _rs = pd.to_datetime(str(_r["시작일"]), errors="coerce")
-                    if pd.isna(_rs):
-                        continue
-                    for _i in range(7):
-                        _wmap[(_rs + pd.Timedelta(days=_i)).strftime("%Y-%m-%d")] = str(_r["주차"])
-                _dt = pd.to_datetime(cd_raw[_date_col].astype(str), errors="coerce")
-                _wk_series = _dt.dt.strftime("%Y-%m-%d").map(_wmap)
-                _mask = (_wk_series == week) & (cd_raw["안부확인율"] > 0)
-                cd_week = cd_raw[_mask]
-                if not cd_week.empty:
-                    summary["안부확인율"] = round(float(cd_week["안부확인율"].mean()), 1)
-            except Exception:
-                pass
+    # 안부확인율: build_dashboard_data에서 사전 계산된 주차별 평균 조회
+    _weekly_cr = data.get("weekly_안부확인율", {})
+    _wk_key = str(week).strip()
+    if _wk_key in _weekly_cr:
+        summary["안부확인율"] = round(float(_weekly_cr[_wk_key]), 1)
 
     return summary
 
