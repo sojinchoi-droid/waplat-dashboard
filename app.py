@@ -541,6 +541,23 @@ def week_label_df(df, col):
 LEGEND_BELOW = dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
 LEGEND_BELOW_LARGE = dict(orientation="h", yanchor="top", y=-0.28, xanchor="center", x=0.5, font=dict(size=8))
 
+# 권역 분류 및 색상 (전역 — 여러 페이지에서 공유)
+DETAIL_REGION = {
+    "서초구청": "서울권", "강북구청": "서울권", "마포구청": "서울권", "광진구청": "서울권",
+    "경기도청": "경기권", "용인시청": "경기권", "포천시청": "경기권", "광명시청": "경기권", "양평군청": "경기권",
+    "청주시청": "충청권", "진천군청": "충청권", "음성군청": "충청권", "괴산군청": "충청권",
+    "증평군청": "충청권", "충북사회서비스원": "충청권", "충남사회서비스원": "충청권",
+    "금정구청": "영남권", "경남사회서비스원": "영남권",
+    "강릉시청": "강원권", "강원사회서비스원": "강원권", "홍천군청": "강원권",
+    "삼척시청": "강원권", "양양군청": "강원권", "정선군청": "강원권", "고성군청": "강원권",
+    "독거노인지원종합센터": "기타", "희망나래장애인복지관": "기타",
+    "제주시청": "제주권", "서귀포시청": "제주권",
+}
+REGION_COLORS = {
+    "서울권": "#2F5496", "경기권": "#00897B", "충청권": "#E65100",
+    "영남권": "#6A1B9A", "강원권": "#00838F", "제주권": "#AD1457", "기타": "#757575",
+}
+
 # 가입완료 20명 미만 소규모 지자체 — 범례 이름에 취소선 표시
 _SMALL_AGENCIES = {"강원사회서비스원", "희망나래장애인복지관", "양양군청"}
 
@@ -1614,33 +1631,33 @@ elif page == "🖐 2.안부확인":
                 )
                 st.plotly_chart(fig_cr, use_container_width=True)
 
-            # 지자체별 안부확인율 (주간 Google Sheets 데이터) — 바로 아래 연결
+            # 지자체별 안부확인율 — 최신 주차 기준 가로 바 차트 (3.안부체크율 동일 방식)
             cr_mun = data.get("checkin_municipality_rate", pd.DataFrame())
             if not cr_mun.empty and "안부확인율" in cr_mun.columns:
                 cr_show = cr_mun[cr_mun["안부확인율"].notna() & (cr_mun["안부확인율"] > 0)].copy()
                 cr_show = cr_show.sort_values("시작일")
-                # 최근 16주만 기본 표시
-                recent_dates = sorted(cr_show["시작일"].unique())[-16:]
-                cr_show = cr_show[cr_show["시작일"].isin(recent_dates)]
-                cr_show = week_label_df(cr_show, "시작일")
                 if not cr_show.empty:
-                    fig_mun = px.line(
-                        cr_show, x="시작일", y="안부확인율", color="지자체명",
-                        markers=True,
-                        color_discrete_sequence=px.colors.qualitative.Set2,
+                    latest_date = cr_show["시작일"].max()
+                    latest_cr = cr_show[cr_show["시작일"] == latest_date].copy()
+                    latest_cr = latest_cr.drop_duplicates(subset="지자체명", keep="last")
+                    latest_cr["권역"] = latest_cr["지자체명"].map(DETAIL_REGION).fillna("기타")
+                    latest_cr = latest_cr.sort_values("안부확인율", ascending=True)
+
+                    st.markdown(f"**{latest_date} 기준**")
+                    fig_mun = px.bar(
+                        latest_cr, y="지자체명", x="안부확인율", orientation="h",
+                        color="권역", color_discrete_map=REGION_COLORS,
+                        height=min(520, max(320, len(latest_cr) * 22)),
                     )
                     fig_mun.update_layout(
-                        title="지자체별 안부확인율 주간 추이 (최근 16주)",
-                        height=420, hovermode="x unified",
-                        xaxis=dict(
-                            type="category", title="",
-                            tickangle=-45, tickfont=dict(size=11),
-                        ),
-                        yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
-                        legend=LEGEND_BELOW, margin=dict(t=40, b=100),
+                        title=f"지자체별 안부확인율 ({latest_date})",
+                        legend=LEGEND_BELOW, margin=dict(t=40, b=70),
+                        xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
+                        yaxis=dict(tickfont=dict(size=11)),
                     )
                     fig_mun.update_traces(
-                        hovertemplate="<b>%{x}</b><br>%{y:.1f}%<extra>%{fullData.name}</extra>"
+                        texttemplate="%{x:.1f}%", textposition="outside",
+                        textfont=dict(size=12),
                     )
                     st.plotly_chart(fig_mun, use_container_width=True)
                 else:
@@ -1812,16 +1829,27 @@ elif page == "🖐 2.안부확인":
                                   margin=dict(t=40, b=30))
                 st.plotly_chart(fig, use_container_width=True)
 
-                # ② 지자체별 추이 (바로 아래)
-                fig2 = px.line(cr_all, x="시작일", y="안부확인율", color="지자체명",
-                               markers=True,
-                               color_discrete_sequence=px.colors.qualitative.Set2)
-                fig2.update_layout(title="지자체별 안부확인율 추이", height=420,
-                                   hovermode="x unified", xaxis=dict(type="category"),
-                                   yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
-                                   legend=LEGEND_BELOW, margin=dict(t=40, b=80))
+                # ② 지자체별 안부확인율 — 최신 주차 바 차트
+                latest_date2 = cr_all["시작일"].max()
+                latest_cr2 = cr_all[cr_all["시작일"] == latest_date2].copy()
+                latest_cr2 = latest_cr2.drop_duplicates(subset="지자체명", keep="last")
+                latest_cr2["권역"] = latest_cr2["지자체명"].map(DETAIL_REGION).fillna("기타")
+                latest_cr2 = latest_cr2.sort_values("안부확인율", ascending=True)
+                st.markdown(f"**{latest_date2} 기준**")
+                fig2 = px.bar(
+                    latest_cr2, y="지자체명", x="안부확인율", orientation="h",
+                    color="권역", color_discrete_map=REGION_COLORS,
+                    height=min(520, max(320, len(latest_cr2) * 22)),
+                )
+                fig2.update_layout(
+                    title=f"지자체별 안부확인율 ({latest_date2})",
+                    legend=LEGEND_BELOW, margin=dict(t=40, b=70),
+                    xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
+                    yaxis=dict(tickfont=dict(size=11)),
+                )
                 fig2.update_traces(
-                    hovertemplate="<b>%{x}</b><br>%{y:.1f}%<extra>%{fullData.name}</extra>"
+                    texttemplate="%{x:.1f}%", textposition="outside",
+                    textfont=dict(size=12),
                 )
                 st.plotly_chart(fig2, use_container_width=True)
             else:
@@ -2065,25 +2093,6 @@ elif page == "💊 7.복약관리":
 # ============================================================
 elif page == "📊 3.안부체크율":
     st.markdown('<div class="section-header">📊 안부체크율</div>', unsafe_allow_html=True)
-
-    # 권역 분류 (세분화)
-    DETAIL_REGION = {
-        "서초구청": "서울권", "강북구청": "서울권", "마포구청": "서울권", "광진구청": "서울권",
-        "경기도청": "경기권", "용인시청": "경기권", "포천시청": "경기권", "광명시청": "경기권", "양평군청": "경기권",
-        "청주시청": "충청권", "진천군청": "충청권", "음성군청": "충청권", "괴산군청": "충청권",
-        "증평군청": "충청권", "충북사회서비스원": "충청권", "충남사회서비스원": "충청권",
-        "강릉시청": "강원권", "강원사회서비스원": "강원권", "홍천군청": "강원권", "삼척시청": "강원권",
-        "양양군청": "강원권", "정선군청": "강원권",
-        "제주시청": "제주권", "서귀포시청": "제주권",
-        "금정구청": "영남권", "경남사회서비스원": "영남권",
-        "독거노인지원종합센터": "독거노인지원종합센터", "독거노인종합지원센터": "독거노인지원종합센터",
-        "희망나래": "기관", "희망나래장애인복지관": "기관",
-    }
-    REGION_COLORS = {
-        "서울권": "#2F5496", "경기권": "#00897B", "충청권": "#E65100",
-        "강원권": "#7B1FA2", "영남권": "#C62828", "제주권": "#0277BD",
-        "독거노인지원종합센터": "#1B5E20", "기관": "#795548",
-    }
 
     # ── 전체 안부체크율(OFF 제외) 추이 — gid=261480368 AB열 ───────────────
     cd_all = data.get("checkin_daily", pd.DataFrame())
