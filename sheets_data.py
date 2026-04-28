@@ -1041,32 +1041,21 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
 
     # 안부확인율: checkin_daily R열 안부미확인률 → 100 - 주차평균 (추이 차트와 완전 동일)
-    # ① 일별로 round(100 - 미확인률, 1) → ② ISO 주차별 groupby mean → ③ 시작일 기준 주차 lookup
+    # weekly_users 시작일 기준 날짜 범위 필터 (추이 차트와 동일 경계)
     cd_raw = data.get("checkin_daily", pd.DataFrame())
     if not cd_raw.empty and "안부미확인률" in cd_raw.columns and "날짜" in cd_raw.columns:
         try:
-            from datetime import datetime as _dt
-            def _to_wlabel(d):
-                s = str(d).strip()
-                try:
-                    if len(s) >= 10 and s[4:5] == "-":
-                        dt = _dt.strptime(s[:10], "%Y-%m-%d")
-                        yr, wk, _ = dt.isocalendar()
-                        return f"{str(yr)[2:]}-{wk:02d}"
-                except Exception:
-                    pass
-                return s
-            cd_tmp = cd_raw[cd_raw["안부미확인률"].apply(safe_numeric) > 0].copy()
-            # 추이 차트와 동일: 일별 먼저 round 후 평균
-            cd_tmp["_cr"] = (100 - cd_tmp["안부미확인률"].apply(safe_numeric)).round(1)
-            cd_tmp["_wk"] = cd_tmp["날짜"].apply(_to_wlabel)
-            weekly_avg = cd_tmp.groupby("_wk")["_cr"].mean().round(1)
-            # 시작일의 ISO 주차로 lookup (추이 차트 groupby 기준과 동일)
             start_date = summary.get("시작일", "")
             if start_date:
-                wlabel = _to_wlabel(str(start_date))
-                if wlabel in weekly_avg.index:
-                    summary["안부확인율"] = float(weekly_avg[wlabel])
+                end_date = (pd.to_datetime(str(start_date)) + pd.Timedelta(days=7)).strftime("%Y-%m-%d")
+                cd_tmp = cd_raw[
+                    (cd_raw["날짜"].astype(str) >= str(start_date)) &
+                    (cd_raw["날짜"].astype(str) < end_date) &
+                    (cd_raw["안부미확인률"].apply(safe_numeric) > 0)
+                ].copy()
+                cd_tmp["_cr"] = (100 - cd_tmp["안부미확인률"].apply(safe_numeric)).round(1)
+                if not cd_tmp.empty:
+                    summary["안부확인율"] = round(cd_tmp["_cr"].mean(), 1)
         except Exception:
             pass
 
