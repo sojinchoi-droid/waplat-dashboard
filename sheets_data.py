@@ -1040,19 +1040,27 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
             summary["전체회원"] = safe_numeric(latest.get("전체회원", 0))
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
 
-    # 안부확인율: 안부확인지자체 시트(checkin_municipality_rate)에서 해당 주차 평균
-    # 시작일 기준으로 해당 주차 행만 필터링 → 전체 지자체 평균
-    cr = data.get("checkin_municipality_rate", pd.DataFrame())
-    if not cr.empty and "안부확인율" in cr.columns and "시작일" in cr.columns:
-        start_date = summary.get("시작일", "")
-        if start_date:
-            week_cr = cr[cr["시작일"].astype(str).str.strip() == str(start_date).strip()]
-        else:
-            # 시작일 없으면 전체에서 최신 주차 사용
-            week_cr = cr[cr["시작일"] == cr["시작일"].max()]
-        valid_cr = week_cr[week_cr["안부확인율"].apply(safe_numeric) > 0]
-        if not valid_cr.empty:
-            summary["안부확인율"] = round(valid_cr["안부확인율"].apply(safe_numeric).mean(), 1)
+    # 안부확인율: DB raw_safety_check에서 complete / target × 100 (A안)
+    # 2.안부확인 페이지와 동일한 방식 — 지자체 규모 가중 합산
+    try:
+        from local_db import get_db_data as _get_db
+        sc_db = _get_db("raw_safety_check")
+        if not sc_db.empty and "complete_user_count" in sc_db.columns and "target_user_count" in sc_db.columns:
+            start_date = summary.get("시작일", "")
+            if start_date:
+                end_date = (pd.to_datetime(start_date) + pd.Timedelta(days=7)).strftime("%Y-%m-%d")
+                sc_week = sc_db[
+                    (sc_db["date"].astype(str) >= str(start_date)) &
+                    (sc_db["date"].astype(str) < end_date)
+                ]
+            else:
+                sc_week = sc_db
+            total_complete = sc_week["complete_user_count"].apply(safe_numeric).sum()
+            total_target = sc_week["target_user_count"].apply(safe_numeric).sum()
+            if total_target > 0:
+                summary["안부확인율"] = round(total_complete / total_target * 100, 1)
+    except Exception:
+        pass
 
     return summary
 
