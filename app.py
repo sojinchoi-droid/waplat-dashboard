@@ -847,23 +847,44 @@ if page == "📋 Summary":
         prev_week = get_prev_week(selected_week)
         prev_summary = cached_week_summary(sheets, data, prev_week) if prev_week else {}
 
-        # 안부확인율 직접 override (캐시 우회 — data에서 바로 조회)
-        _wcr = data.get("weekly_안부확인율", {})
-        if str(selected_week).strip() in _wcr:
-            summary["안부확인율"] = round(float(_wcr[str(selected_week).strip()]), 1)
-        if prev_week and str(prev_week).strip() in _wcr:
-            prev_summary["안부확인율"] = round(float(_wcr[str(prev_week).strip()]), 1)
+        # 안부확인율 직접 계산 (캐시·wmap 완전 우회)
+        _cd_cr = data.get("checkin_daily", pd.DataFrame())
+        _wu_cr = data.get("weekly_users", pd.DataFrame())
+        _dc_cr = next((c for c in _cd_cr.columns if "날짜" in str(c) or "date" in str(c).lower()), None)
+        if not _cd_cr.empty and "안부미확인률" in _cd_cr.columns and _dc_cr and not _wu_cr.empty:
+            for _wk_label, _wk_df in [
+                (selected_week, _wu_cr[_wu_cr["주차"].astype(str).str.strip() == str(selected_week).strip()]),
+                (prev_week,     _wu_cr[_wu_cr["주차"].astype(str).str.strip() == str(prev_week).strip()] if prev_week else pd.DataFrame()),
+            ]:
+                if _wk_df.empty:
+                    continue
+                try:
+                    _s = pd.to_datetime(str(_wk_df.iloc[0]["시작일"]), errors="coerce")
+                    if pd.isna(_s):
+                        continue
+                    _e = _s + pd.Timedelta(days=7)
+                    _dt = pd.to_datetime(_cd_cr[_dc_cr].astype(str), errors="coerce")
+                    _m = (_dt >= _s) & (_dt < _e) & (_cd_cr["안부미확인률"].apply(safe_numeric) > 0)
+                    _sub = _cd_cr[_m]
+                    if not _sub.empty:
+                        _val = round(100 - float(_sub["안부미확인률"].apply(safe_numeric).mean()), 1)
+                        if _wk_label == selected_week:
+                            summary["안부확인율"] = _val
+                        elif _wk_label == prev_week:
+                            prev_summary["안부확인율"] = _val
+                except Exception:
+                    pass
 
         st.markdown(f'<div class="section-header">📅 {selected_week}주차 ({summary.get("시작일", "")}) 운영 현황</div>', unsafe_allow_html=True)
 
-        # ── 임시 디버그 (확인 후 삭제 예정)
-        with st.expander("🔧 디버그 정보 (임시)", expanded=False):
+        # ── 임시 디버그 (확인 후 삭제 예정) — expander 열어서 캡처해주세요
+        with st.expander("🔧 디버그 정보 (임시)", expanded=True):
             _cd_dbg = data.get("checkin_daily", pd.DataFrame())
-            st.write("checkin_daily 컬럼:", _cd_dbg.columns.tolist())
-            st.write("checkin_daily 샘플 (날짜열):", _cd_dbg.iloc[:3][_cd_dbg.columns[:3]].to_dict() if not _cd_dbg.empty else "empty")
-            st.write("summary 시작일:", summary.get("시작일", "없음"))
-            st.write("weekly_안부확인율 키 목록:", list(_wcr.keys())[-5:] if _wcr else "비어있음")
-            st.write("selected_week:", selected_week)
+            st.write("날짜컬럼:", _dc_cr)
+            st.write("날짜값 샘플:", _cd_dbg[_dc_cr].head(3).tolist() if _dc_cr and not _cd_dbg.empty else "없음")
+            _wu_row = _wu_cr[_wu_cr["주차"].astype(str).str.strip() == str(selected_week).strip()] if not _wu_cr.empty else pd.DataFrame()
+            st.write("weekly_users 시작일:", _wu_row.iloc[0]["시작일"] if not _wu_row.empty else "없음")
+            st.write("안부미확인률 컬럼:", "안부미확인률" in _cd_dbg.columns)
             st.write("summary 안부확인율:", summary.get("안부확인율", "미설정"))
             st.write("summary 안부체크율:", summary.get("안부체크율", "미설정"))
 
