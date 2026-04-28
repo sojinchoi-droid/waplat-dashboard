@@ -1823,15 +1823,17 @@ elif page == "🖐 2.안부확인":
 
     else:
         # DB 데이터 없으면 Google Sheets 데이터 사용 (기존 방식)
-        cr_base = data.get("checkin_municipality_rate", pd.DataFrame())
-        if not cr_base.empty and "안부확인율" in cr_base.columns:
-            cr_all = cr_base[cr_base["안부확인율"].notna() & (cr_base["안부확인율"] > 0)].copy()
-            cr_all["안부확인율"] = cr_all["안부확인율"].round(1)
-            cr_all = cr_all.sort_values("시작일")
-            cr_all = week_label_df(cr_all, "시작일")
-            if not cr_all.empty:
-                # ① 전체 평균 추이
-                avg_cr = cr_all.groupby("시작일")["안부확인율"].mean().round(1).reset_index()
+
+        # ① 전체 평균 추이: 안부확인전체 시트 R열(안부미확인률) → 100 - 값, 주차별 평균
+        cd_raw = data.get("checkin_daily", pd.DataFrame())
+        if not cd_raw.empty and "안부미확인률" in cd_raw.columns and "날짜" in cd_raw.columns:
+            cd_trend = cd_raw[cd_raw["안부미확인률"].apply(safe_numeric) > 0].copy()
+            cd_trend["안부확인율"] = (100 - cd_trend["안부미확인률"].apply(safe_numeric)).round(1)
+            cd_trend = cd_trend.sort_values("날짜")
+            cd_trend = week_label_df(cd_trend, "날짜")
+            avg_cr = cd_trend.groupby("날짜")["안부확인율"].mean().round(1).reset_index()
+            avg_cr = avg_cr.rename(columns={"날짜": "시작일"})
+            if not avg_cr.empty:
                 fig = px.line(avg_cr, x="시작일", y="안부확인율", markers=True,
                               color_discrete_sequence=["#2F5496"])
                 fig.update_layout(title="안부확인율 추이 (전체 평균)", height=350,
@@ -1840,8 +1842,17 @@ elif page == "🖐 2.안부확인":
                                   margin=dict(t=40, b=30))
                 fig.update_traces(hovertemplate="<b>%{x}</b><br>평균 안부확인율: %{y:.1f}%<extra></extra>")
                 st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("안부확인 데이터가 없습니다. ('안부확인전체' 시트 R열 안부미확인률 필요)")
 
-                # ② 지자체별 안부확인율 — 최신 주차 바 차트
+        # ② 지자체별 안부확인율 — 최신 주차 바 차트
+        cr_base = data.get("checkin_municipality_rate", pd.DataFrame())
+        if not cr_base.empty and "안부확인율" in cr_base.columns:
+            cr_all = cr_base[cr_base["안부확인율"].notna() & (cr_base["안부확인율"] > 0)].copy()
+            cr_all["안부확인율"] = cr_all["안부확인율"].round(1)
+            cr_all = cr_all.sort_values("시작일")
+            cr_all = week_label_df(cr_all, "시작일")
+            if not cr_all.empty:
                 latest_date2 = cr_all["시작일"].max()
                 latest_cr2 = cr_all[cr_all["시작일"] == latest_date2].copy()
                 latest_cr2 = latest_cr2.drop_duplicates(subset="지자체명", keep="last")
@@ -1866,10 +1877,6 @@ elif page == "🖐 2.안부확인":
                     hovertemplate="<b>%{y}</b><br>안부확인율: %{x:.1f}%<extra></extra>",
                 )
                 st.plotly_chart(fig2, use_container_width=True)
-            else:
-                st.info("안부확인율 데이터가 없습니다.")
-        else:
-            st.info("안부확인 데이터가 없습니다. '📥 데이터 입력'에서 safetyCheck 데이터를 붙여넣어주세요.")
 
 
 # ============================================================
