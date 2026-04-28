@@ -198,6 +198,14 @@ def init_db():
 
     # 10. 주간 지표 통합 테이블 (Google Sheets → DB 임포트용)
     c.execute("""
+    CREATE TABLE IF NOT EXISTS dashboard_notes (
+        key TEXT PRIMARY KEY,
+        value TEXT DEFAULT '',
+        updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+    )
+    """)
+
+    c.execute("""
     CREATE TABLE IF NOT EXISTS raw_weekly_indicator (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         imported_at TEXT DEFAULT (datetime('now', 'localtime')),
@@ -669,6 +677,24 @@ def get_agency_summary(sheets=None) -> dict:
     summary["registration_rate"] = round(total_completed / total_target * 100, 1) if total_target > 0 else 0
 
     return summary
+
+
+def get_note(key: str, default: str = "") -> str:
+    conn = get_connection()
+    row = conn.execute("SELECT value FROM dashboard_notes WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    return row[0] if row else default
+
+
+def save_note(key: str, value: str):
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO dashboard_notes (key, value, updated_at)
+        VALUES (?, ?, datetime('now', 'localtime'))
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    """, (key, value))
+    conn.commit()
+    conn.close()
 
 
 # 앱 시작 시 자동 초기화

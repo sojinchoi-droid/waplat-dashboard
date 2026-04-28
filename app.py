@@ -42,6 +42,7 @@ from local_db import (
     get_all_dates, get_data_stats, init_db,
     save_agency, deactivate_agency, activate_agency, delete_agency,
     get_all_agencies, get_agency_summary,
+    get_note, save_note,
 )
 
 # ============================================================
@@ -1007,6 +1008,23 @@ if page == "📋 Summary":
                                              "registered_users", "joined_users", "registered_rate", "joined_rate"]].copy()
                 safe_display.columns = ["관제시작일", "비고", "지자체명", "계약인원", "등록이용자", "가입이용자", "등록이용률(%)", "가입이용률(%)"]
                 st.dataframe(safe_display, use_container_width=True, hide_index=True)
+
+            # 계약 시작 / 명단 미등록 지자체 메모
+            st.markdown("**📋 계약 시작 / 명단 미등록 지자체**")
+            _pending_note = get_note("pending_agencies", "영월군청")
+            _note_col, _btn_col = st.columns([5, 1])
+            with _note_col:
+                _new_note = st.text_area(
+                    "계약은 체결됐지만 아직 명단을 제출하지 않은 지자체를 메모해두세요.",
+                    value=_pending_note,
+                    height=80,
+                    key="pending_agencies_note",
+                    label_visibility="collapsed",
+                )
+            with _btn_col:
+                if st.button("저장", key="save_pending_note", use_container_width=True):
+                    save_note("pending_agencies", _new_note)
+                    st.success("저장됨")
 
             # 파일 업로드 + 수동 편집
             _safe_expander_open = st.session_state.get("safe_expander_open", False)
