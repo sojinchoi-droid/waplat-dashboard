@@ -1040,8 +1040,8 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
             summary["전체회원"] = safe_numeric(latest.get("전체회원", 0))
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
 
-    # 안부확인율: checkin_daily R열 안부미확인률 → 100 - 주차평균 (추이 차트와 완전 동일 기준)
-    # ISO 주차 레이블(week)로 필터 — 날짜 범위 아닌 동일 week 레이블 사용
+    # 안부확인율: checkin_daily R열 안부미확인률 → 100 - 주차평균 (추이 차트와 완전 동일)
+    # ① 일별로 round(100 - 미확인률, 1) → ② ISO 주차별 groupby mean → ③ 시작일 기준 주차 lookup
     cd_raw = data.get("checkin_daily", pd.DataFrame())
     if not cd_raw.empty and "안부미확인률" in cd_raw.columns and "날짜" in cd_raw.columns:
         try:
@@ -1056,15 +1056,19 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
                 except Exception:
                     pass
                 return s
-            cd_labeled = cd_raw.copy()
-            cd_labeled["_wk"] = cd_labeled["날짜"].apply(_to_wlabel)
-            cd_week = cd_labeled[cd_labeled["_wk"] == week]
+            cd_tmp = cd_raw[cd_raw["안부미확인률"].apply(safe_numeric) > 0].copy()
+            # 추이 차트와 동일: 일별 먼저 round 후 평균
+            cd_tmp["_cr"] = (100 - cd_tmp["안부미확인률"].apply(safe_numeric)).round(1)
+            cd_tmp["_wk"] = cd_tmp["날짜"].apply(_to_wlabel)
+            weekly_avg = cd_tmp.groupby("_wk")["_cr"].mean().round(1)
+            # 시작일의 ISO 주차로 lookup (추이 차트 groupby 기준과 동일)
+            start_date = summary.get("시작일", "")
+            if start_date:
+                wlabel = _to_wlabel(str(start_date))
+                if wlabel in weekly_avg.index:
+                    summary["안부확인율"] = float(weekly_avg[wlabel])
         except Exception:
-            cd_week = cd_raw
-        valid_miss = cd_week[cd_week["안부미확인률"].apply(safe_numeric) > 0]
-        if not valid_miss.empty:
-            avg_miss = valid_miss["안부미확인률"].apply(safe_numeric).mean()
-            summary["안부확인율"] = round(100 - avg_miss, 1)
+            pass
 
     return summary
 
