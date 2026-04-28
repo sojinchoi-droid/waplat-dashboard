@@ -1041,18 +1041,24 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
 
     # 안부확인율: checkin_daily R열 안부미확인률 → 100 - 주차평균 (추이 차트와 완전 동일)
-    # weekly_users 시작일 기준 날짜 범위 필터 (추이 차트와 동일 경계)
+    # pd.to_datetime으로 날짜 형식 무관하게 비교
     cd_raw = data.get("checkin_daily", pd.DataFrame())
-    if not cd_raw.empty and "안부미확인률" in cd_raw.columns and "날짜" in cd_raw.columns:
+    # 날짜 컬럼 이름 탐색 (날짜/일자/date 등)
+    _date_col = None
+    for _c in cd_raw.columns:
+        _cl = str(_c).replace("\n", "").strip().lower()
+        if _cl in ("날짜", "date", "일자", "일") or "날짜" in _cl or "date" in _cl:
+            _date_col = _c
+            break
+    if not cd_raw.empty and "안부미확인률" in cd_raw.columns and _date_col is not None:
         try:
             start_date = summary.get("시작일", "")
             if start_date:
-                end_date = (pd.to_datetime(str(start_date)) + pd.Timedelta(days=7)).strftime("%Y-%m-%d")
-                cd_tmp = cd_raw[
-                    (cd_raw["날짜"].astype(str) >= str(start_date)) &
-                    (cd_raw["날짜"].astype(str) < end_date) &
-                    (cd_raw["안부미확인률"].apply(safe_numeric) > 0)
-                ].copy()
+                _s = pd.to_datetime(str(start_date), errors="coerce")
+                _e = _s + pd.Timedelta(days=7)
+                _dt = pd.to_datetime(cd_raw[_date_col].astype(str), errors="coerce")
+                _mask = (_dt >= _s) & (_dt < _e) & (cd_raw["안부미확인률"].apply(safe_numeric) > 0)
+                cd_tmp = cd_raw[_mask].copy()
                 cd_tmp["_cr"] = (100 - cd_tmp["안부미확인률"].apply(safe_numeric)).round(1)
                 if not cd_tmp.empty:
                     summary["안부확인율"] = round(cd_tmp["_cr"].mean(), 1)

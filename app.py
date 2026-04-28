@@ -1828,28 +1828,38 @@ elif page == "🖐 2.안부확인":
         # weekly_users 시작일 기준 날짜 범위로 묶어 Summary와 동일한 기준 사용
         cd_raw = data.get("checkin_daily", pd.DataFrame())
         wu_trend = data.get("weekly_users", pd.DataFrame())
-        if not cd_raw.empty and "안부미확인률" in cd_raw.columns and "날짜" in cd_raw.columns:
+        # 날짜 컬럼 탐색
+        _cd_date_col = None
+        for _c in cd_raw.columns:
+            _cl = str(_c).replace("\n", "").strip().lower()
+            if _cl in ("날짜", "date", "일자", "일") or "날짜" in _cl or "date" in _cl:
+                _cd_date_col = _c
+                break
+        if not cd_raw.empty and "안부미확인률" in cd_raw.columns and _cd_date_col is not None:
             cd_trend = cd_raw[cd_raw["안부미확인률"].apply(safe_numeric) > 0].copy()
             cd_trend["안부확인율"] = (100 - cd_trend["안부미확인률"].apply(safe_numeric)).round(1)
-            cd_trend = cd_trend.sort_values("날짜")
+            cd_trend["_dt"] = pd.to_datetime(cd_trend[_cd_date_col].astype(str), errors="coerce")
+            cd_trend = cd_trend.dropna(subset=["_dt"]).sort_values("_dt")
             # weekly_users 기준 날짜→주차 매핑 (Summary와 동일 경계)
             if not wu_trend.empty and "주차" in wu_trend.columns and "시작일" in wu_trend.columns:
                 _wmap = {}
                 for _, _r in wu_trend.iterrows():
                     try:
-                        _s = pd.to_datetime(str(_r["시작일"]))
+                        _s = pd.to_datetime(str(_r["시작일"]), errors="coerce")
+                        if pd.isna(_s):
+                            continue
                         for _i in range(7):
                             _wmap[(_s + pd.Timedelta(days=_i)).strftime("%Y-%m-%d")] = str(_r["주차"])
                     except Exception:
                         pass
-                cd_trend["_wk"] = cd_trend["날짜"].astype(str).map(_wmap)
+                cd_trend["_wk"] = cd_trend["_dt"].dt.strftime("%Y-%m-%d").map(_wmap)
                 cd_trend = cd_trend[cd_trend["_wk"].notna()]
                 avg_cr = cd_trend.groupby("_wk")["안부확인율"].mean().round(1).reset_index()
                 avg_cr = avg_cr.rename(columns={"_wk": "시작일"})
             else:
-                cd_trend = week_label_df(cd_trend, "날짜")
-                avg_cr = cd_trend.groupby("날짜")["안부확인율"].mean().round(1).reset_index()
-                avg_cr = avg_cr.rename(columns={"날짜": "시작일"})
+                cd_trend["_날짜"] = cd_trend["_dt"].apply(lambda d: date_to_week_label(d.strftime("%Y-%m-%d")))
+                avg_cr = cd_trend.groupby("_날짜")["안부확인율"].mean().round(1).reset_index()
+                avg_cr = avg_cr.rename(columns={"_날짜": "시작일"})
             if not avg_cr.empty:
                 fig = px.line(avg_cr, x="시작일", y="안부확인율", markers=True,
                               color_discrete_sequence=["#2F5496"])
