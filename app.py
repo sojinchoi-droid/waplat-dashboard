@@ -1857,23 +1857,7 @@ elif page == "❤ 5.심혈관체크":
                     plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#EF5350",
                                        _rc, "전체이용비중", "#FF6F00",
                                        "심혈관체크 이용자수 + 전체이용비중")
-            cf = filter_by_week_range(cardio_users, "주차", p_start, p_end, weeks) if not cardio_users.empty else pd.DataFrame()
-            if not cf.empty:
-                # 이용자수 → 이용률 (주차별 지자체 가입완료 회원 대비 %)
-                _wrm = data.get("weekly_registered_by_mun", pd.DataFrame())
-                if not _wrm.empty:
-                    _reg_week_map = {(str(r["주차"]).strip(), str(r["지자체명"]).strip()): safe_numeric(r["가입완료"])
-                                     for _, r in _wrm.iterrows()}
-                    cf = cf.copy()
-                    def _cardio_rate(r):
-                        denom = _reg_week_map.get((str(r["주차"]).strip(), str(r["지자체명"]).strip()), 0)
-                        return round(r["값"] / denom * 100, 1) if denom > 0 else 0
-                    cf["값"] = cf.apply(_cardio_rate, axis=1)
-                    plot_municipality_lines(cf, "지자체별 심혈관체크 이용률 추이 (가입회원 대비 %)", metric_label="이용률(%)")
-                else:
-                    plot_municipality_lines(cf, "지자체별 심혈관체크 이용자 추이", metric_label="이용자수")
-            # ── 지자체별 이용자비중 추이 (AI~BK열) ──────────────────────────
-            st.markdown("---")
+            # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
             mrt_cardio = extract_mun_ratio_trend(cardio_user_raw)
             if not mrt_cardio.empty:
                 mrt_cardio = filter_by_week_range(mrt_cardio, "주차", p_start, p_end, weeks)
@@ -2863,23 +2847,7 @@ elif page == "😰 6.스트레스체크":
                     plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#AB47BC",
                                        _rc, "전체이용비중", "#FF6F00",
                                        "스트레스체크 이용자수 + 전체이용비중")
-            sf = filter_by_week_range(stress_users, "주차", p_start, p_end, weeks) if not stress_users.empty else pd.DataFrame()
-            if not sf.empty:
-                # 이용자수 → 이용률 (주차별 지자체 가입완료 회원 대비 %)
-                _wrm_s = data.get("weekly_registered_by_mun", pd.DataFrame())
-                if not _wrm_s.empty:
-                    _reg_week_map_s = {(str(r["주차"]).strip(), str(r["지자체명"]).strip()): safe_numeric(r["가입완료"])
-                                       for _, r in _wrm_s.iterrows()}
-                    sf = sf.copy()
-                    def _stress_rate(r):
-                        denom = _reg_week_map_s.get((str(r["주차"]).strip(), str(r["지자체명"]).strip()), 0)
-                        return round(r["값"] / denom * 100, 1) if denom > 0 else 0
-                    sf["값"] = sf.apply(_stress_rate, axis=1)
-                    plot_municipality_lines(sf, "지자체별 스트레스체크 이용률 추이 (가입회원 대비 %)", metric_label="이용률(%)")
-                else:
-                    plot_municipality_lines(sf, "지자체별 스트레스체크 이용자 추이", metric_label="이용자수")
-            # ── 지자체별 이용자비중 추이 (AI~BK열) ──────────────────────────
-            st.markdown("---")
+            # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
             mrt_stress = extract_mun_ratio_trend(stress_user_raw)
             if not mrt_stress.empty:
                 mrt_stress = filter_by_week_range(mrt_stress, "주차", p_start, p_end, weeks)
