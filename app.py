@@ -1844,9 +1844,8 @@ elif page == "🖐 2.안부확인":
             if _cl in ("날짜", "date", "일자", "일") or "날짜" in _cl or "date" in _cl:
                 _cd_date_col = _c
                 break
-        if not cd_raw.empty and "안부미확인률" in cd_raw.columns and _cd_date_col is not None:
-            cd_trend = cd_raw[cd_raw["안부미확인률"].apply(safe_numeric) > 0].copy()
-            cd_trend["안부확인율"] = (100 - cd_trend["안부미확인률"].apply(safe_numeric)).round(1)
+        if not cd_raw.empty and "안부확인율" in cd_raw.columns and _cd_date_col is not None:
+            cd_trend = cd_raw[cd_raw["안부확인율"] > 0].copy()
             cd_trend["_dt"] = pd.to_datetime(cd_trend[_cd_date_col].astype(str), errors="coerce")
             cd_trend = cd_trend.dropna(subset=["_dt"]).sort_values("_dt")
             # weekly_users 기준 날짜→주차 매핑 (Summary와 동일 경계)

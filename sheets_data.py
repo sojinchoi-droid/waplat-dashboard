@@ -494,6 +494,9 @@ def get_checkin_daily(sheets: dict) -> pd.DataFrame:
     for col in df.columns:
         if col not in ["날짜", "date"]:
             df[col] = df[col].apply(safe_numeric)
+    # 안부확인율 = 100 - 안부미확인률 (R열 기반 파생 컬럼)
+    if "안부미확인률" in df.columns:
+        df["안부확인율"] = (100 - df["안부미확인률"]).round(1)
     return df
 
 
@@ -1040,30 +1043,30 @@ def get_week_summary(sheets: dict, data: dict, week: str) -> dict:
             summary["전체회원"] = safe_numeric(latest.get("전체회원", 0))
             summary["안부확인완료자"] = safe_numeric(latest.get("안부확인완료자", 0))
 
-    # 안부확인율: checkin_daily R열 안부미확인률 → 100 - 주차평균 (추이 차트와 완전 동일)
-    # pd.to_datetime으로 날짜 형식 무관하게 비교
+    # 안부확인율: 추이 차트와 동일한 _wmap 방식 (weekly_users 날짜 범위 기준)
     cd_raw = data.get("checkin_daily", pd.DataFrame())
-    # 날짜 컬럼 이름 탐색 (날짜/일자/date 등)
-    _date_col = None
-    for _c in cd_raw.columns:
-        _cl = str(_c).replace("\n", "").strip().lower()
-        if _cl in ("날짜", "date", "일자", "일") or "날짜" in _cl or "date" in _cl:
-            _date_col = _c
-            break
-    if not cd_raw.empty and "안부미확인률" in cd_raw.columns and _date_col is not None:
-        try:
-            start_date = summary.get("시작일", "")
-            if start_date:
-                _s = pd.to_datetime(str(start_date), errors="coerce")
-                _e = _s + pd.Timedelta(days=7)
+    wu = data.get("weekly_users", pd.DataFrame())
+    if not cd_raw.empty and "안부확인율" in cd_raw.columns:
+        _date_col = next((c for c in cd_raw.columns
+                          if str(c).replace("\n","").strip().lower() in ("날짜","date","일자","일")
+                          or "날짜" in str(c) or "date" in str(c).lower()), None)
+        if _date_col and not wu.empty and "주차" in wu.columns and "시작일" in wu.columns:
+            try:
+                _wmap = {}
+                for _, _r in wu.iterrows():
+                    _rs = pd.to_datetime(str(_r["시작일"]), errors="coerce")
+                    if pd.isna(_rs):
+                        continue
+                    for _i in range(7):
+                        _wmap[(_rs + pd.Timedelta(days=_i)).strftime("%Y-%m-%d")] = str(_r["주차"])
                 _dt = pd.to_datetime(cd_raw[_date_col].astype(str), errors="coerce")
-                _mask = (_dt >= _s) & (_dt < _e) & (cd_raw["안부미확인률"].apply(safe_numeric) > 0)
-                cd_tmp = cd_raw[_mask].copy()
-                cd_tmp["_cr"] = (100 - cd_tmp["안부미확인률"].apply(safe_numeric)).round(1)
-                if not cd_tmp.empty:
-                    summary["안부확인율"] = round(cd_tmp["_cr"].mean(), 1)
-        except Exception:
-            pass
+                _wk_series = _dt.dt.strftime("%Y-%m-%d").map(_wmap)
+                _mask = (_wk_series == week) & (cd_raw["안부확인율"] > 0)
+                cd_week = cd_raw[_mask]
+                if not cd_week.empty:
+                    summary["안부확인율"] = round(float(cd_week["안부확인율"].mean()), 1)
+            except Exception:
+                pass
 
     return summary
 
