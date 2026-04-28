@@ -541,6 +541,12 @@ def week_label_df(df, col):
 LEGEND_BELOW = dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
 LEGEND_BELOW_LARGE = dict(orientation="h", yanchor="top", y=-0.28, xanchor="center", x=0.5, font=dict(size=8))
 
+# 가입완료 20명 미만 소규모 지자체 — 범례 이름 앞에 ○ 표시
+_SMALL_AGENCIES = {"강원사회서비스원", "희망나래장애인복지관", "양양군청"}
+
+def _mun_label(name: str) -> str:
+    return f"○ {name}" if name in _SMALL_AGENCIES else name
+
 # 권역 분류 및 색상 (전역 — 여러 페이지에서 공유)
 DETAIL_REGION = {
     "서초구청": "서울권", "강북구청": "서울권", "마포구청": "서울권", "광진구청": "서울권",
@@ -798,7 +804,9 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
         elif view_mode == "Top 5 + Bottom 5":
             df_long = df_long[df_long["지자체명"].isin(top5 + bot5)]
 
-    fig = px.line(df_long, x=x_col, y="값", color="지자체명", markers=True)
+    df_plot = df_long.copy()
+    df_plot["지자체명"] = df_plot["지자체명"].apply(_mun_label)
+    fig = px.line(df_plot, x=x_col, y="값", color="지자체명", markers=True)
 
     # 전체 평균 참조선 (점선)
     if show_avg and not df_long.empty:
