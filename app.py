@@ -847,6 +847,13 @@ if page == "📋 Summary":
         prev_week = get_prev_week(selected_week)
         prev_summary = cached_week_summary(sheets, data, prev_week) if prev_week else {}
 
+        # 안부확인율 직접 override (캐시 우회 — data에서 바로 조회)
+        _wcr = data.get("weekly_안부확인율", {})
+        if str(selected_week).strip() in _wcr:
+            summary["안부확인율"] = round(float(_wcr[str(selected_week).strip()]), 1)
+        if prev_week and str(prev_week).strip() in _wcr:
+            prev_summary["안부확인율"] = round(float(_wcr[str(prev_week).strip()]), 1)
+
         st.markdown(f'<div class="section-header">📅 {selected_week}주차 ({summary.get("시작일", "")}) 운영 현황</div>', unsafe_allow_html=True)
 
         # ── 임시 디버그 (확인 후 삭제 예정)
@@ -855,6 +862,8 @@ if page == "📋 Summary":
             st.write("checkin_daily 컬럼:", _cd_dbg.columns.tolist())
             st.write("checkin_daily 샘플 (날짜열):", _cd_dbg.iloc[:3][_cd_dbg.columns[:3]].to_dict() if not _cd_dbg.empty else "empty")
             st.write("summary 시작일:", summary.get("시작일", "없음"))
+            st.write("weekly_안부확인율 키 목록:", list(_wcr.keys())[-5:] if _wcr else "비어있음")
+            st.write("selected_week:", selected_week)
             st.write("summary 안부확인율:", summary.get("안부확인율", "미설정"))
             st.write("summary 안부체크율:", summary.get("안부체크율", "미설정"))
 
