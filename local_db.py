@@ -697,8 +697,31 @@ def save_note(key: str, value: str):
     conn.close()
 
 
+def seed_manual_agencies():
+    """코드에 고정된 지자체 계약 정보를 DB에 upsert (Streamlit Cloud 재시작 후에도 유지)"""
+    entries = [
+        # (agency_name, service_model, contract_start, contract_end, target_users, memo)
+        ("용인시청",   "safe", "2026-05-01", "2026-12-31", 50,  "5월 신규 계약"),
+        ("광주 동구청", "safe", "2026-05-01", "2026-12-31", 10,  "5월 신규 계약"),
+    ]
+    conn = get_connection()
+    for name, model, c_start, c_end, users, memo in entries:
+        conn.execute("""
+            INSERT INTO agency_master (agency_name, service_model, contract_start, contract_end, target_users, memo, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+            ON CONFLICT(agency_name, contract_start) DO UPDATE SET
+                service_model = excluded.service_model,
+                contract_end  = excluded.contract_end,
+                target_users  = excluded.target_users,
+                memo          = excluded.memo
+        """, (name, model, c_start, c_end, users, memo))
+    conn.commit()
+    conn.close()
+
+
 # 앱 시작 시 자동 초기화
 init_db()
+seed_manual_agencies()
 
 
 if __name__ == "__main__":
