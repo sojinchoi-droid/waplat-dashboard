@@ -849,6 +849,15 @@ if page == "📋 Summary":
 
         st.markdown(f'<div class="section-header">📅 {selected_week}주차 ({summary.get("시작일", "")}) 운영 현황</div>', unsafe_allow_html=True)
 
+        # ── 임시 디버그 (확인 후 삭제 예정)
+        with st.expander("🔧 디버그 정보 (임시)", expanded=False):
+            _cd_dbg = data.get("checkin_daily", pd.DataFrame())
+            st.write("checkin_daily 컬럼:", _cd_dbg.columns.tolist())
+            st.write("checkin_daily 샘플 (날짜열):", _cd_dbg.iloc[:3][_cd_dbg.columns[:3]].to_dict() if not _cd_dbg.empty else "empty")
+            st.write("summary 시작일:", summary.get("시작일", "없음"))
+            st.write("summary 안부확인율:", summary.get("안부확인율", "미설정"))
+            st.write("summary 안부체크율:", summary.get("안부체크율", "미설정"))
+
         # 회원가입 현황 (이용자현황 시트에서)
         reg = data.get("registration", pd.DataFrame())
         total_contract = 0
