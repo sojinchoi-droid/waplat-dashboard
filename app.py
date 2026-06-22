@@ -1268,11 +1268,6 @@ if page == "📋 Summary":
             except:
                 safe_status = pd.DataFrame()
 
-            # 이번 주 신규 추가 (아직 집계 대상 아님)
-            _SAFE_EXCLUDE = {"다살림재가노인지원서비스센터"}
-            if not safe_status.empty and "agency_name" in safe_status.columns:
-                safe_status = safe_status[~safe_status["agency_name"].isin(_SAFE_EXCLUDE)]
-
             st.markdown('<div class="section-header">🛡 세이프 대상 지자체 현황</div>', unsafe_allow_html=True)
 
             if not safe_status.empty:
