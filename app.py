@@ -92,7 +92,7 @@ def _check_password() -> bool:
         pw = st.text_input("비밀번호", type="password", label_visibility="collapsed",
                            placeholder="비밀번호를 입력하세요")
         if st.button("로그인", use_container_width=True, type="primary"):
-            correct = st.secrets.get("PASSWORD", "waflat2025!")
+            correct = st.secrets.get("PASSWORD", "waplat2025!")
             if pw == correct:
                 st.session_state["authenticated"] = True
                 st.rerun()
@@ -3138,7 +3138,7 @@ elif page == "🎮 12.맞고(와플랫+게스트)":
 # ============================================================
 elif page == "🃏 11.맞고(와플랫)":
     st.markdown('<div class="section-header">🃏 맞고 (와플랫)</div>', unsafe_allow_html=True)
-    p_start, p_end = page_week_range_selector("matgo_waflat", weeks)
+    p_start, p_end = page_week_range_selector("matgo_waplat", weeks)
 
     tab1, tab2, tab3 = st.tabs(["이용자수", "플레이 판수", "플레이 시간"])
 
@@ -5035,7 +5035,7 @@ elif page == "🗄 DB 뷰어":
             # CSV 다운로드
             csv_data = merged.to_csv(index=False).encode("utf-8-sig")
             st.download_button("📥 통합 데이터 CSV 다운로드", data=csv_data,
-                               file_name=f"waflat_unified_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
+                               file_name=f"waplat_unified_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
                                mime="text/csv")
         else:
             st.info("저장된 데이터가 없습니다.")

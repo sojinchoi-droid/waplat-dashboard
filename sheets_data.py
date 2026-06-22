@@ -1014,7 +1014,7 @@ def build_dashboard_data(sheets: dict) -> dict:
     # 8. DB fallback — Google Sheets 데이터가 비어있으면 DB에서 가져오기
     try:
         import sqlite3
-        _db_path = __import__('os').path.join(__import__('os').path.dirname(__file__), 'waflat.db')
+        _db_path = __import__('os').path.join(__import__('os').path.dirname(__file__), 'waplat.db')
         if __import__('os').path.exists(_db_path):
             _conn = sqlite3.connect(_db_path)
 

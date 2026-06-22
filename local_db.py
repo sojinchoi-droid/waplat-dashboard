@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "waflat.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "waplat.db")
 
 
 def get_connection():
