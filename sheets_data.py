@@ -709,7 +709,7 @@ def get_ai_municipality_data(sheets: dict) -> pd.DataFrame:
 
     # ── 지자체명 컬럼 자동 탐지 ─────────────────────────────────────────
     # '통합' 또는 시청/군청/서비스원 등 지자체 키워드를 포함하는 컬럼 탐색
-    _MUN_KEYWORDS = ["통합", "시청", "군청", "서비스원", "복지관", "삼척", "양양", "정선"]
+    _MUN_KEYWORDS = ["통합", "시청", "군청", "구청", "서비스원", "복지관", "센터", "삼척", "양양", "정선"]
     name_col = None
     for c in df.columns[2:]:   # col[0]=주차, col[1]=날짜범위 이후부터 탐색
         vals = df[c].dropna().astype(str).str.strip()
