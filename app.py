@@ -438,7 +438,7 @@ div[data-baseweb="select"] > div:hover {
 # ============================================================
 # 데이터 로드 — DB 우선, Google Sheets는 새로고침 시에만
 # ============================================================
-@st.cache_data(ttl=604800, show_spinner="Google Sheets 데이터 로딩 중... (최초 1회, 이후 4시간 캐시)")
+@st.cache_data(ttl=14400, show_spinner="Google Sheets 데이터 로딩 중... (최초 1회, 이후 4시간 캐시)")
 def load_all_data():
     """전체 Google Sheets 로드 (4시간 캐시)"""
     sheets = fetch_all_sheets()
@@ -446,13 +446,13 @@ def load_all_data():
     return sheets, data
 
 
-@st.cache_data(ttl=604800, show_spinner=False)
+@st.cache_data(ttl=14400, show_spinner=False)
 def cached_heatmap(_data: dict, week: str) -> "pd.DataFrame":
     """지자체 히트맵 — 주차별 캐시 (페이지 재진입 시 즉시 반환)"""
     return build_municipality_heatmap_data(_data, week)
 
 
-@st.cache_data(ttl=604800, show_spinner=False)
+@st.cache_data(ttl=14400, show_spinner=False)
 def cached_week_summary(_sheets: dict, _data: dict, week: str) -> dict:
     """주차 요약 — 주차별 캐시"""
     return get_week_summary(_sheets, _data, week)
