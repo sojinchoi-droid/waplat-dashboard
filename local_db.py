@@ -622,9 +622,9 @@ def get_all_agencies(include_inactive=False) -> pd.DataFrame:
 # 베이직 지자체 목록 (고정 관리)
 BASIC_AGENCIES = [
     "경기도청", "서초구청", "진천군청", "포천시청",
-    "경남사회서비스원", "홍천군청", "정선군청",
+    "경남사회서비스원", "홍천군청", "정선군청", "영월군청",
 ]
-TOTAL_ACTIVE = 24   # 전체 계약 지자체 수 (세이프 + 베이직)
+TOTAL_ACTIVE = 28   # 전체 계약 지자체 수 (세이프 + 베이직)
 
 def get_agency_summary(sheets=None) -> dict:
     """지자체 현황 요약
@@ -729,7 +729,7 @@ def seed_manual_agencies():
 
 
 def seed_safe_agency_status():
-    """세이프 현황 데이터 시드 — Streamlit Cloud 재시작 후에도 데이터 유지"""
+    """세이프 현황 데이터 시드 — 재시작 시 초기화 후 재삽입 (잔여 데이터 방지)"""
     entries = [
         # (monitoring_start_date, memo, agency_name, contract_users, registered_users, joined_users)
         ("2026.01.02",                  "(정식)세이프",                    "강릉시청",             50,  29,  25),
@@ -750,11 +750,11 @@ def seed_safe_agency_status():
         ("2026.05.04",                  "(정식)세이프",                    "용인시청",              50,  13,   7),
         ("2026.05.04",                  "(정식)세이프",                    "광주동구청",            100,  93,  79),
         ("2026.06.15",                  "(정식)세이프 플러스",              "다살림재가노인지원서비스센터", 5,   3,   2),
-        ("2026.06.15",                  "(시범)베이직",                    "영월군청",              20,   3,  17),
         ("2026.06.15",                  "(정식)세이프 플러스",              "계양구청",              50,   3,  47),
         ("2026.06.15",                  "(정식)세이프",                    "연수구청",              30,   3,  27),
     ]
     conn = get_connection()
+    conn.execute("DELETE FROM safe_agency_status")  # 재시작 시 초기화
     for start, memo, name, c_users, r_users, j_users in entries:
         r_rate = round(r_users / c_users * 100, 1) if c_users > 0 else 0
         j_rate = round(j_users / c_users * 100, 1) if c_users > 0 else 0
