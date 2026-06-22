@@ -3557,6 +3557,11 @@ elif page == "🤖 AI 생활지원사":
                         _wk_to_lbl[_wkn] = _r["_xlbl"]
                     _all_x_labels = [_wk_to_lbl[k] for k in sorted(_wk_to_lbl)]
 
+                    # 삼척시청 기준 월 구분선·레이블 위치 (모든 기관 공통)
+                    _ref_month_groups = {}
+                    for _xl, _xm in zip(_ref_wk["_xlbl"].tolist(), _ref_wk["_m"].tolist()):
+                        _ref_month_groups.setdefault(int(_xm), []).append(_xl)
+
                     for mun in _muns_m:
                         color_base = _MUN_COLORS_M.get(mun, "#607D8B")
                         svc_color  = _SVC_COLORS_M.get(color_base, "#90A4AE")
@@ -3647,27 +3652,23 @@ elif page == "🤖 AI 생활지원사":
                                 ),
                             ))
 
-                        # ── 월 구분선 + 월 레이블 annotation
-                        # ── 월 구분 점선 + 월 레이블 (_all_x_labels 인덱스 기준)
-                        _month_list = mun_wk["_month"].tolist()
-                        _prev_m = None
-                        for _xi, _xm in enumerate(_month_list):
-                            if _prev_m is not None and _xm != _prev_m:
-                                _bi = _all_x_labels.index(x_labels[_xi]) if x_labels[_xi] in _all_x_labels else _xi
+                        # ── 월 구분선 + 월 레이블 (삼척시청 기준으로 모든 기관 통일)
+                        _ref_months_sorted = sorted(_ref_month_groups.keys())
+                        for _mi, _rm in enumerate(_ref_months_sorted):
+                            # 월 경계 구분선 (첫 번째 월 제외)
+                            if _mi > 0:
+                                _first_lbl = _ref_month_groups[_rm][0]
+                                _bi = _all_x_labels.index(_first_lbl) if _first_lbl in _all_x_labels else 0
                                 fig_mm.add_vline(
                                     x=_bi - 0.5,
                                     line=dict(color="#78909C", width=1.5, dash="dot"),
                                 )
-                            _prev_m = _xm
-
-                        _month_groups_m = {}
-                        for _xl, _xm in zip(x_labels, _month_list):
-                            _month_groups_m.setdefault(int(_xm), []).append(_xl)
-                        for _xm, _lbls in sorted(_month_groups_m.items()):
+                            # 월 레이블 annotation
+                            _lbls = _ref_month_groups[_rm]
                             _mid = _lbls[len(_lbls) // 2]
                             fig_mm.add_annotation(
                                 x=_mid, y=138,
-                                text=f"<b>{_xm}월</b>",
+                                text=f"<b>{_rm}월</b>",
                                 showarrow=False,
                                 font=dict(size=12, color="#37474F"),
                                 bgcolor="rgba(236,239,241,0.92)",
