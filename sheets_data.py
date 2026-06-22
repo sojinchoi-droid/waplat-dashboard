@@ -32,20 +32,28 @@ SHEET_GIDS = {
     "AI생활지원사":     "1751859498",
     "AI생활지원사월별": "552264832",
     "AI생활지원사신규": "887906400",
+    "AI삼척월별":       "1891951831",
+    "AI양양월별":       "1179230271",
+    "AI정선월별":       "926765476",
     "안부확인raw":      "1323180805",
     "안부체크off":      "1043653372",
     "건강상담지자체":   "867975933",
+    "걸음수현황":       "1968687679",
+    "걸음수이용":       "680392566",
 }
 
 # 지자체 키워드 (컬럼명에서 지자체 자동 탐지용)
+# NOTE: 더 긴/구체적 키워드를 앞에 배치해야 부분 매칭 오류 방지
+# (예: 용인시청통합돌봄 → 용인시청보다 먼저 체크)
 MUNICIPALITY_KEYWORDS = [
-    "경기도청", "용인시청", "서초구청", "청주시청", "진천군청", "음성군청",
+    "경기도청", "용인시청통합돌봄", "용인시청", "서초구청", "청주시청", "진천군청", "음성군청",
     "강북구청", "금정구청", "괴산군청", "증평군청", "포천시청", "마포구청",
     "광진구청", "경남사회서비스원", "강릉시청", "강원사회서비스원",
     "충북사회서비스원", "독거노인", "희망나래", "홍천군청",
     "충남사회서비스원", "삼척시청",
     "광명시청", "제주시청", "서귀포시청", "양양군청",
     "양평군청", "정선군청",
+    "고성군청", "광주동구청",
 ]
 
 # 이름 별칭 (같은 지자체의 다른 표기)
@@ -70,18 +78,20 @@ def normalize_agency_name(name: str) -> str:
 
 # 수도권 / 비수도권 분류
 REGION_MAP = {
-    "경기도청": "수도권", "용인시청": "수도권", "서초구청": "수도권",
-    "강북구청": "수도권", "포천시청": "수도권", "마포구청": "수도권",
-    "광진구청": "수도권",
+    "경기도청": "수도권", "용인시청": "수도권", "용인시청통합돌봄": "수도권",
+    "서초구청": "수도권", "강북구청": "수도권", "포천시청": "수도권",
+    "마포구청": "수도권", "광진구청": "수도권", "광명시청": "수도권",
+    "양평군청": "수도권",
     "청주시청": "비수도권", "진천군청": "비수도권", "음성군청": "비수도권",
     "금정구청": "비수도권", "괴산군청": "비수도권", "증평군청": "비수도권",
     "강릉시청": "비수도권", "홍천군청": "비수도권", "삼척시청": "비수도권",
     "경남사회서비스원": "비수도권", "강원사회서비스원": "비수도권",
     "충북사회서비스원": "비수도권", "충남사회서비스원": "비수도권",
+    "제주시청": "비수도권", "서귀포시청": "비수도권",
+    "양양군청": "비수도권", "정선군청": "비수도권",
+    "고성군청": "비수도권", "광주동구청": "비수도권",
     "독거노인지원종합센터": "기관", "독거노인종합지원센터": "기관",
     "독거노인": "기관", "희망나래": "기관", "희망나래장애인복지관": "기관",
-    "광명시청": "수도권", "제주시청": "비수도권", "서귀포시청": "비수도권",
-    "양양군청": "비수도권", "양평군청": "수도권", "정선군청": "비수도권",
 }
 
 
@@ -272,7 +282,7 @@ def get_weekly_users(sheets: dict) -> pd.DataFrame:
         elif "주간" in cl and "이탈" in cl and "주간이탈자" not in used_names:
             rename[c] = "주간이탈자"
             used_names.add("주간이탈자")
-        elif cl == "전체가입률" and "전체가입률" not in used_names:
+        elif ("전체가입률" in cl or ("회원가입" in cl and "비중" in cl) or ("완료" in cl and "비중" in cl)) and "전체가입률" not in used_names:
             rename[c] = "전체가입률"
             used_names.add("전체가입률")
         elif "대상자" in cl and "수" in cl and "대상자수" not in used_names:
@@ -566,9 +576,9 @@ def get_ai_monthly(sheets: dict) -> pd.DataFrame:
         # 인트로 참여율 — 컬럼명이 딱 "인트로"
         elif cl == "인트로" and "인트로참여율" not in used:
             rename[c] = "인트로참여율"; used.add("인트로참여율")
-        # 서비스 이용률 — 컬럼명이 딱 "서비스"
-        elif cl == "서비스" and "서비스이용률" not in used:
-            rename[c] = "서비스이용률"; used.add("서비스이용률")
+        # 서비스 제안율 — 컬럼명이 딱 "서비스"
+        elif cl == "서비스" and "서비스제안율" not in used:
+            rename[c] = "서비스제안율"; used.add("서비스제안율")
         # 프로그램 완료율 — 컬럼명이 "프로그램완료" 또는 "프로그램 완료"
         elif cl == "프로그램완료" and "프로그램완료율" not in used:
             rename[c] = "프로그램완료율"; used.add("프로그램완료율")
@@ -577,13 +587,56 @@ def get_ai_monthly(sheets: dict) -> pd.DataFrame:
             rename[c] = "AI알림도달률"; used.add("AI알림도달률")
     if rename:
         df = df.rename(columns=rename)
-    for col in ["인트로참여율", "서비스이용률", "프로그램완료율", "AI알림도달률", "회원수"]:
+    for col in ["인트로참여율", "서비스제안율", "프로그램완료율", "AI알림도달률", "회원수"]:
         if col in df.columns:
             df[col] = df[col].apply(safe_numeric)
     # 월 컬럼이 없으면 빈 반환
     if "월" not in df.columns:
         return pd.DataFrame()
     return df
+
+
+def get_ai_mun_monthly(sheets: dict) -> dict:
+    """삼척/양양/정선 지자체별 월별 데이터
+    Returns dict: {"삼척시청": df, "양양군청": df, "정선군청": df}
+    컬럼: 월, 회원수, 인트로참여율, 서비스제안율, 프로그램완료율
+    """
+    MUN_SHEET_MAP = {
+        "삼척시청": "AI삼척월별",
+        "양양군청": "AI양양월별",
+        "정선군청": "AI정선월별",
+    }
+    result = {}
+    for mun, sheet_key in MUN_SHEET_MAP.items():
+        df = sheets.get(sheet_key, pd.DataFrame())
+        if df.empty:
+            continue
+        df = df.copy()
+        rename = {}
+        used = set()
+        for c in df.columns:
+            cl = str(c).replace("\n", "").replace(" ", "").strip()
+            if ("월별" in cl or cl == "월") and "월" not in used:
+                rename[c] = "월"; used.add("월")
+            elif cl == "회원수" and "회원수" not in used:
+                rename[c] = "회원수"; used.add("회원수")
+            elif cl == "인트로" and "인트로참여율" not in used:
+                rename[c] = "인트로참여율"; used.add("인트로참여율")
+            elif cl == "서비스" and "서비스제안율" not in used:
+                rename[c] = "서비스제안율"; used.add("서비스제안율")
+            elif cl == "프로그램완료" and "프로그램완료율" not in used:
+                rename[c] = "프로그램완료율"; used.add("프로그램완료율")
+        if rename:
+            df = df.rename(columns=rename)
+        for col in ["인트로참여율", "서비스제안율", "프로그램완료율", "회원수"]:
+            if col in df.columns:
+                df[col] = df[col].apply(safe_numeric)
+        if "월" not in df.columns:
+            continue
+        df = df[df["월"].notna() & (df["월"].astype(str).str.strip() != "")]
+        if not df.empty:
+            result[mun] = df.reset_index(drop=True)
+    return result
 
 
 def get_ai_funnel(sheets: dict) -> pd.DataFrame:
@@ -608,42 +661,70 @@ def get_ai_funnel(sheets: dict) -> pd.DataFrame:
 def get_ai_municipality_data(sheets: dict) -> pd.DataFrame:
     """AI생활지원사 신규 시트(gid=887906400): 지자체별 주차 데이터
 
-    시트 구조:
-      - 구분: 주차 기간(예: '4월 5일~11일') — 통합 행에만 값, 이하 NaN
-      - Unnamed: 1: 지자체명('통합' 또는 '삼척시청'/'양양군청'/'정선군청')
-      - 계약인원, 가입인원, 알람요일
-      - receiveAlarmCount, receiveAlarmUserCount
+    시트 구조 (실제):
+      - col[0] '구분': 주차 번호 (e.g. '11주차') — 각 주 첫 행에만 있고 나머지 NaN
+      - col[1]: 날짜 범위 (e.g. '3월 8일~14일') — 각 주 첫 행에만 있고 나머지 NaN
+      - 지자체명 컬럼: '통합' / '삼척시청' / '양양군청' / '정선군청' — 자동 탐지
+      - 계약인원, 가입인원, 알람요일, receiveAlarmCount, receiveAlarmUserCount
       - intro, intro(%): 인트로 수/율
       - service proposal(%): 서비스 제안율
       - program(%): 프로그램 완료율
-
-    반환: 지자체별 행만 포함 (통합 제외), 기간 컬럼 forward-fill
     """
     df = sheets.get("AI생활지원사신규", pd.DataFrame())
     if df.empty:
         return pd.DataFrame()
     df = df.copy()
 
-    # 구분 컬럼 forward-fill (기간명이 통합 행에만 있음)
-    period_col = df.columns[0]   # '구분'
-    name_col   = df.columns[1]   # 'Unnamed: 1' → 지자체명
+    period_col    = df.columns[0]   # '구분' — 주차 번호 (e.g. '11주차')
+    date_range_col = df.columns[1]  # 날짜범위 (e.g. '3월 8일~14일')
 
-    df[period_col] = df[period_col].ffill()
+    # 두 컬럼 모두 forward-fill (각 주 첫 행에만 값이 있음)
+    df[period_col]    = df[period_col].ffill()
+    df[date_range_col] = df[date_range_col].ffill()
 
-    # 수치 컬럼 정리
+    # ── 지자체명 컬럼 자동 탐지 ─────────────────────────────────────────
+    # '통합' 또는 시청/군청/서비스원 등 지자체 키워드를 포함하는 컬럼 탐색
+    _MUN_KEYWORDS = ["통합", "시청", "군청", "서비스원", "복지관", "삼척", "양양", "정선"]
+    name_col = None
+    for c in df.columns[2:]:   # col[0]=주차, col[1]=날짜범위 이후부터 탐색
+        vals = df[c].dropna().astype(str).str.strip()
+        if any(any(kw in v for kw in _MUN_KEYWORDS) for v in vals):
+            name_col = c
+            break
+
+    if name_col is None:
+        # fallback: 두 번째 컬럼부터 순서대로 시도
+        for c in df.columns[1:]:
+            vals = df[c].dropna().astype(str).str.strip()
+            if any(any(kw in v for kw in _MUN_KEYWORDS) for v in vals):
+                name_col = c
+                break
+
+    if name_col is None:
+        return pd.DataFrame()
+
+    # ── 수치 컬럼 정리 ───────────────────────────────────────────────────
     num_cols = ["계약인원", "가입인원", "receiveAlarmCount", "receiveAlarmUserCount",
-                "intro", "intro(%)", "service proposal(%)", "program(%)"]
+                "intro", "intro(%)", "service proposal", "service proposal(%)",
+                "program complete", "program(%)"]
 
     result_rows = []
     for _, row in df.iterrows():
         name = str(row.get(name_col, "")).strip()
         if name in ("nan", "", "NaN"):
             continue
-        period = str(row.get(period_col, "")).strip()
+        period    = str(row.get(period_col,    "")).strip()   # '11주차'
+        date_range = str(row.get(date_range_col, "")).strip() # '3월 8일~14일'
         alarm_day = str(row.get("알람요일", "")).strip()
         alarm_day = "" if alarm_day in ("nan", "NaN") else alarm_day
 
-        r = {"기간": period, "지자체": name, "알람요일": alarm_day}
+        # 기간: '11주차 (3월 8일~14일)' 형태로 조합 → 월 정보 포함
+        if period and date_range and date_range not in ("nan", "NaN"):
+            full_period = f"{period} ({date_range})"
+        else:
+            full_period = period or date_range
+
+        r = {"기간": full_period, "지자체": name, "알람요일": alarm_day}
         for nc in num_cols:
             if nc in df.columns:
                 r[nc] = safe_numeric(row.get(nc, 0))
@@ -796,8 +877,9 @@ def get_checkin_municipality_rate(sheets: dict) -> pd.DataFrame:
             entry["off대상자"] = off
 
             # IT~JR 사전 계산값 우선 사용 (Google Sheets 수식 결과가 더 정확)
+            # 단, 안부체크 발송이 0인 경우 시트 수식 오류값 무시 (회원 0명 기관 등)
             orig = entry.get("안부체크율_원본")
-            if orig is not None and orig > 0:
+            if orig is not None and orig > 0 and send is not None and send > 0:
                 entry["안부체크율"] = orig
             elif send is not None and resp is not None and send > 0:
                 actual_target = send - off
@@ -908,6 +990,7 @@ def build_dashboard_data(sheets: dict) -> dict:
     result["ai_funnel"] = get_ai_funnel(sheets)
     result["ai_monthly"] = get_ai_monthly(sheets)
     result["ai_municipality"] = get_ai_municipality_data(sheets)
+    result["ai_mun_monthly"] = get_ai_mun_monthly(sheets)
     result["weekly_registered_by_mun"] = get_weekly_registered_by_municipality(sheets)
 
     # 6-1. 심혈관/스트레스 C열(합계) 직접 추출

@@ -111,214 +111,334 @@ st.markdown("""
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap');
 
-/* ── 기본 폰트: Pretendard (가독성 최적화) ── */
+/* ══════════════════════════════════════
+   기본 폰트 & 배경
+══════════════════════════════════════ */
 html, body, [class*="css"] {
     font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.01em;
 }
 
-/* ── 전체 배경 ── */
-.stApp { background-color: #F4F6FB; }
+/* 커스텀 스크롤바 */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* 배경 — 부드러운 블루그레이 */
+.stApp {
+    background: linear-gradient(160deg, #F0F4FF 0%, #F7F8FC 50%, #EFF3FB 100%);
+    background-attachment: fixed;
+}
+
+/* 메인 콘텐츠 여백 */
+section.main > div { padding-top: 1.2rem; }
+.block-container { padding-left: 2rem !important; padding-right: 2rem !important; }
 
 /* ══════════════════════════════════════
-   KPI 카드 — 공통 베이스
+   KPI 카드 — 글래스모피즘 + 그라디언트
 ══════════════════════════════════════ */
 .metric-card, .metric-card-green, .metric-card-red, .metric-card-orange {
     position: relative;
-    padding: 1.4rem 1.2rem 1.1rem;
-    border-radius: 20px;
+    padding: 1.5rem 1.3rem 1.2rem;
+    border-radius: 22px;
     color: white;
     text-align: center;
     margin-bottom: 0.6rem;
     overflow: hidden;
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.22s ease;
+    border: 1px solid rgba(255,255,255,0.25);
 }
 .metric-card:hover,
 .metric-card-green:hover,
 .metric-card-red:hover,
 .metric-card-orange:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
+    transform: translateY(-5px) scale(1.01);
+    box-shadow: 0 20px 48px rgba(0,0,0,0.20) !important;
 }
 
-/* 카드 안쪽 빛 효과 */
+/* 카드 빛번짐 효과 — 상단 */
 .metric-card::before, .metric-card-green::before,
 .metric-card-red::before, .metric-card-orange::before {
     content: '';
     position: absolute;
-    top: -30%; right: -10%;
-    width: 160px; height: 160px;
-    background: rgba(255,255,255,0.10);
+    top: -40%; right: -15%;
+    width: 180px; height: 180px;
+    background: rgba(255,255,255,0.13);
+    border-radius: 50%;
+    pointer-events: none;
+}
+/* 카드 빛번짐 효과 — 하단 */
+.metric-card::after, .metric-card-green::after,
+.metric-card-red::after, .metric-card-orange::after {
+    content: '';
+    position: absolute;
+    bottom: -40%; left: -10%;
+    width: 120px; height: 120px;
+    background: rgba(0,0,0,0.07);
     border-radius: 50%;
     pointer-events: none;
 }
 
-/* 라벨 (지표명) */
+/* 라벨 */
 .metric-card h3, .metric-card-green h3,
 .metric-card-red h3, .metric-card-orange h3 {
-    margin: 0 0 0.5rem;
-    font-size: 0.72rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
+    margin: 0 0 0.45rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.10em;
     text-transform: uppercase;
-    opacity: 0.80;
+    opacity: 0.78;
 }
 
-/* 숫자 값 — 크고 굵게 */
+/* 숫자 값 */
 .metric-card h1, .metric-card-green h1,
 .metric-card-red h1, .metric-card-orange h1 {
-    margin: 0 0 0.4rem;
-    font-size: 2.6rem;
+    margin: 0 0 0.45rem;
+    font-size: 2.7rem;
     font-weight: 900;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
     line-height: 1;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
-/* 전주 대비 델타 */
+/* 델타 */
 .metric-card p, .metric-card-green p,
 .metric-card-red p, .metric-card-orange p {
     margin: 0;
-    font-size: 0.78rem;
-    opacity: 0.85;
+    font-size: 0.76rem;
+    opacity: 0.88;
 }
-.metric-card .up   { color: #A5F3C0; font-weight: 700; }
-.metric-card .down { color: #FFAB91; font-weight: 700; }
-.metric-card .flat { color: rgba(255,255,255,0.6); }
+.metric-card .up, .metric-card-green .up,
+.metric-card-red .up, .metric-card-orange .up   { color: #A7F3D0; font-weight: 700; }
+.metric-card .down, .metric-card-green .down,
+.metric-card-red .down, .metric-card-orange .down { color: #FCA5A5; font-weight: 700; }
+.metric-card .flat, .metric-card-green .flat,
+.metric-card-red .flat, .metric-card-orange .flat { color: rgba(255,255,255,0.55); }
 
-/* ── 카드별 색상 ── */
+/* 카드별 색상 */
 .metric-card {
-    background: linear-gradient(135deg, #5B73E8 0%, #7B52D3 100%);
-    box-shadow: 0 6px 20px rgba(91,115,232,0.35);
+    background: linear-gradient(140deg, #6366F1 0%, #7C3AED 100%);
+    box-shadow: 0 8px 24px rgba(99,102,241,0.40);
 }
 .metric-card-green {
-    background: linear-gradient(135deg, #11B981 0%, #059669 100%);
-    box-shadow: 0 6px 20px rgba(17,185,129,0.35);
+    background: linear-gradient(140deg, #10B981 0%, #047857 100%);
+    box-shadow: 0 8px 24px rgba(16,185,129,0.38);
 }
 .metric-card-red {
-    background: linear-gradient(135deg, #F87171 0%, #DC2626 100%);
-    box-shadow: 0 6px 20px rgba(248,113,113,0.35);
+    background: linear-gradient(140deg, #F87171 0%, #B91C1C 100%);
+    box-shadow: 0 8px 24px rgba(248,113,113,0.38);
 }
 .metric-card-orange {
-    background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
-    box-shadow: 0 6px 20px rgba(251,146,60,0.35);
+    background: linear-gradient(140deg, #F97316 0%, #C2410C 100%);
+    box-shadow: 0 8px 24px rgba(249,115,22,0.38);
 }
 
 /* ══════════════════════════════════════
-   섹션 헤더
+   섹션 헤더 — 그라디언트 라인 + 깊이감
 ══════════════════════════════════════ */
 .section-header {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.65rem 1.1rem;
-    margin: 1.8rem 0 1rem;
+    gap: 0.7rem;
+    padding: 0.75rem 1.3rem;
+    margin: 2rem 0 1.2rem;
     background: white;
-    border-radius: 12px;
-    border-left: 5px solid #5B73E8;
+    border-radius: 14px;
+    border-left: 5px solid transparent;
+    background-clip: padding-box;
+    background-image: linear-gradient(white, white),
+                      linear-gradient(135deg, #6366F1, #10B981);
+    background-origin: border-box;
     font-weight: 700;
     font-size: 1rem;
-    color: #1E293B;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    color: #0F172A;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.05);
+    letter-spacing: -0.01em;
 }
 
 /* ══════════════════════════════════════
-   인사이트 박스
+   인사이트 박스 — 부드럽고 세련되게
 ══════════════════════════════════════ */
 .insight-box {
-    background: #EFF6FF;
-    border-left: 4px solid #5B73E8;
-    padding: 0.9rem 1.2rem;
-    margin: 0.4rem 0;
-    border-radius: 0 12px 12px 0;
-    font-size: 0.88rem;
-    line-height: 1.65;
+    background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+    border-left: 4px solid #6366F1;
+    padding: 1rem 1.3rem;
+    margin: 0.5rem 0;
+    border-radius: 0 14px 14px 0;
+    font-size: 0.875rem;
+    line-height: 1.7;
     color: #1E293B;
+    box-shadow: 0 2px 8px rgba(99,102,241,0.08);
 }
 .insight-box-danger {
-    background: #FFF5F5;
-    border-left: 4px solid #F87171;
-    padding: 0.9rem 1.2rem;
-    margin: 0.4rem 0;
-    border-radius: 0 12px 12px 0;
-    font-size: 0.88rem;
-    line-height: 1.65;
+    background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%);
+    border-left: 4px solid #F43F5E;
+    padding: 1rem 1.3rem;
+    margin: 0.5rem 0;
+    border-radius: 0 14px 14px 0;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #1E293B;
+    box-shadow: 0 2px 8px rgba(244,63,94,0.08);
 }
 .insight-box-success {
-    background: #F0FDF4;
-    border-left: 4px solid #11B981;
-    padding: 0.9rem 1.2rem;
-    margin: 0.4rem 0;
-    border-radius: 0 12px 12px 0;
-    font-size: 0.88rem;
-    line-height: 1.65;
+    background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
+    border-left: 4px solid #10B981;
+    padding: 1rem 1.3rem;
+    margin: 0.5rem 0;
+    border-radius: 0 14px 14px 0;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #1E293B;
+    box-shadow: 0 2px 8px rgba(16,185,129,0.08);
 }
 
 /* ══════════════════════════════════════
-   상태 뱃지
+   상태 뱃지 — 약간 더 선명하게
 ══════════════════════════════════════ */
-.status-danger   { background:#FEE2E2; color:#991B1B; padding:3px 11px; border-radius:999px; font-weight:700; font-size:0.78rem; display:inline-block; }
-.status-caution  { background:#FEF9C3; color:#92400E; padding:3px 11px; border-radius:999px; font-weight:700; font-size:0.78rem; display:inline-block; }
-.status-normal   { background:#F1F5F9; color:#475569; padding:3px 11px; border-radius:999px; font-size:0.78rem; display:inline-block; }
-.status-excellent{ background:#DCFCE7; color:#166534; padding:3px 11px; border-radius:999px; font-weight:700; font-size:0.78rem; display:inline-block; }
+.status-danger   { background:#FEE2E2; color:#9F1239; padding:4px 12px; border-radius:999px; font-weight:700; font-size:0.76rem; display:inline-block; box-shadow:0 1px 4px rgba(159,18,57,0.15); }
+.status-caution  { background:#FEF3C7; color:#92400E; padding:4px 12px; border-radius:999px; font-weight:700; font-size:0.76rem; display:inline-block; box-shadow:0 1px 4px rgba(146,64,14,0.12); }
+.status-normal   { background:#F1F5F9; color:#475569; padding:4px 12px; border-radius:999px; font-size:0.76rem; display:inline-block; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+.status-excellent{ background:#DCFCE7; color:#14532D; padding:4px 12px; border-radius:999px; font-weight:700; font-size:0.76rem; display:inline-block; box-shadow:0 1px 4px rgba(20,83,45,0.15); }
 
 /* ══════════════════════════════════════
-   탭 스타일
+   탭 스타일 — 더 부드럽고 선명하게
 ══════════════════════════════════════ */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 2px;
-    background: #E8ECF4;
-    border-radius: 12px;
-    padding: 4px;
+    gap: 3px;
+    background: rgba(226,232,240,0.7);
+    border-radius: 14px;
+    padding: 5px;
+    backdrop-filter: blur(4px);
 }
 .stTabs [data-baseweb="tab"] {
-    padding: 7px 18px;
-    border-radius: 9px;
+    padding: 8px 20px;
+    border-radius: 10px;
     font-weight: 500;
     font-size: 0.84rem;
     color: #64748B;
     background: transparent;
     border: none;
+    transition: all 0.15s ease;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    color: #6366F1 !important;
+    background: rgba(255,255,255,0.6) !important;
 }
 .stTabs [aria-selected="true"] {
     background: white !important;
-    color: #5B73E8 !important;
+    color: #6366F1 !important;
     font-weight: 700 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    box-shadow: 0 2px 12px rgba(99,102,241,0.15), 0 1px 3px rgba(0,0,0,0.06) !important;
 }
 
 /* ══════════════════════════════════════
-   사이드바
+   사이드바 — 다크 + 세련된 메뉴
 ══════════════════════════════════════ */
 section[data-testid="stSidebar"] {
-    background: #1E293B;
+    background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
+    border-right: 1px solid rgba(255,255,255,0.04);
 }
 section[data-testid="stSidebar"] * {
-    color: #CBD5E1 !important;
+    color: #94A3B8 !important;
+}
+/* 라디오 원 숨기기 */
+section[data-testid="stSidebar"] .stRadio [data-baseweb="radio"] > div:first-child {
+    display: none !important;
 }
 section[data-testid="stSidebar"] .stRadio label {
     font-size: 0.85rem !important;
-    padding: 4px 0;
+    padding: 8px 12px !important;
+    border-radius: 9px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px;
+    margin: 2px 0;
+    color: #94A3B8 !important;
+}
+section[data-testid="stSidebar"] .stRadio label:hover {
+    background: rgba(99,102,241,0.14) !important;
+    color: #C7D2FE !important;
+}
+section[data-testid="stSidebar"] .stRadio [aria-checked="true"] ~ div label,
+section[data-testid="stSidebar"] .stRadio label[data-checked="true"] {
+    background: rgba(99,102,241,0.18) !important;
+    color: #A5B4FC !important;
+    font-weight: 600 !important;
 }
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-    color: #94A3B8 !important;
-    font-size: 0.78rem !important;
+    color: #475569 !important;
+    font-size: 0.76rem !important;
+}
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 {
+    color: #E2E8F0 !important;
+}
+section[data-testid="stSidebar"] .stDivider {
+    border-color: rgba(255,255,255,0.06) !important;
 }
 
-/* ══════════════════════════════════════
-   데이터프레임
-══════════════════════════════════════ */
+/* ── 버튼 스타일 ── */
+.stButton > button {
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+    transition: all 0.18s ease !important;
+    border: none !important;
+}
+.stButton > button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.12) !important;
+}
+
+/* ── 차트 컨테이너 카드화 ── */
+div[data-testid="stPlotlyChart"] {
+    background: white;
+    border-radius: 18px;
+    padding: 0.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
+    margin-bottom: 0.5rem;
+}
+
+/* ── expander 스타일 ── */
+.stExpander {
+    border: 1px solid rgba(0,0,0,0.06) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+    overflow: hidden;
+}
+
+/* ── 데이터프레임 ── */
 div[data-testid="stMetricValue"] { font-size: 1.4rem; font-weight: 700; }
 
-/* ── 전체 컨텐츠 영역 카드화 ── */
-section.main > div { padding-top: 1rem; }
+/* ── info / warning / error 박스 ── */
+div[data-testid="stAlert"] {
+    border-radius: 12px !important;
+    border: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+}
+
+/* ── 선택박스 / 슬라이더 ── */
+div[data-baseweb="select"] > div {
+    border-radius: 10px !important;
+    border-color: #E2E8F0 !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
+}
+div[data-baseweb="select"] > div:hover {
+    border-color: #6366F1 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
 # 데이터 로드 — DB 우선, Google Sheets는 새로고침 시에만
 # ============================================================
-@st.cache_data(ttl=14400, show_spinner="Google Sheets 데이터 로딩 중... (최초 1회, 이후 4시간 캐시)")
+@st.cache_data(ttl=604800, show_spinner="Google Sheets 데이터 로딩 중... (최초 1회, 이후 4시간 캐시)")
 def load_all_data():
     """전체 Google Sheets 로드 (4시간 캐시)"""
     sheets = fetch_all_sheets()
@@ -326,13 +446,13 @@ def load_all_data():
     return sheets, data
 
 
-@st.cache_data(ttl=14400, show_spinner=False)
+@st.cache_data(ttl=604800, show_spinner=False)
 def cached_heatmap(_data: dict, week: str) -> "pd.DataFrame":
     """지자체 히트맵 — 주차별 캐시 (페이지 재진입 시 즉시 반환)"""
     return build_municipality_heatmap_data(_data, week)
 
 
-@st.cache_data(ttl=14400, show_spinner=False)
+@st.cache_data(ttl=604800, show_spinner=False)
 def cached_week_summary(_sheets: dict, _data: dict, week: str) -> dict:
     """주차 요약 — 주차별 캐시"""
     return get_week_summary(_sheets, _data, week)
@@ -341,13 +461,18 @@ try:
     sheets, data = load_all_data()
     DATA_LOADED = True
 
-    # 주차별 안부확인율 전역 계산 (100 - 안부미확인률, weekly_users 기준)
+    # 주차별 안부확인율 전역 계산 — 트렌드 차트와 동일 로직 사용
     _G_CR: dict = {}
     try:
         _gcd = data.get("checkin_daily", pd.DataFrame())
         _gwu = data.get("weekly_users", pd.DataFrame())
-        _gdc = next((c for c in _gcd.columns if "날짜" in str(c) or "date" in str(c).lower()), None)
-        if not _gcd.empty and "안부미확인률" in _gcd.columns and _gdc is not None and not _gwu.empty:
+        _gdc = None
+        for _c in _gcd.columns:
+            _cl = str(_c).replace("\n", "").strip().lower()
+            if _cl in ("날짜", "date", "일자", "일") or "날짜" in _cl or "date" in _cl:
+                _gdc = _c
+                break
+        if not _gcd.empty and "안부확인율" in _gcd.columns and _gdc is not None and not _gwu.empty:
             _gwmap = {}
             for _, _gr in _gwu.iterrows():
                 _gs = pd.to_datetime(str(_gr.get("시작일", "")), errors="coerce")
@@ -356,12 +481,11 @@ try:
                 _gw = str(_gr.get("주차", "")).strip()
                 for _gi in range(7):
                     _gwmap[(_gs + pd.Timedelta(days=_gi)).strftime("%Y-%m-%d")] = _gw
-            _gdt = pd.to_datetime(_gcd[_gdc].astype(str), errors="coerce")
-            _gcd2 = _gcd.copy()
+            _gcd2 = _gcd[_gcd["안부확인율"] > 0].copy()
+            _gdt = pd.to_datetime(_gcd2[_gdc].astype(str), errors="coerce")
             _gcd2["_wk"] = _gdt.dt.strftime("%Y-%m-%d").map(_gwmap)
-            _gcd2["_cr"] = (100 - _gcd2["안부미확인률"].apply(safe_numeric)).round(1)
-            _gcd2 = _gcd2[_gcd2["_wk"].notna() & (_gcd2["_cr"] > 0)]
-            _G_CR = _gcd2.groupby("_wk")["_cr"].mean().round(1).to_dict()
+            _gcd2 = _gcd2[_gcd2["_wk"].notna()]
+            _G_CR = _gcd2.groupby("_wk")["안부확인율"].mean().round(1).to_dict()
     except Exception:
         pass
     # 최초 1회: Google Sheets에서 지자체 자동 등록 + 안부확인 raw 데이터 임포트
@@ -474,16 +598,18 @@ with st.sidebar:
             "👥 1.회원가입 & 이탈",
             "🖐 2.안부확인",
             "📊 3.안부체크율",
-            "🔄 4.안부체크 변경",
-            "❤ 5.심혈관체크",
-            "😰 6.스트레스체크",
-            "💊 7.복약관리",
-            "🩺 8.건강상담",
-            "💬 9.생활상담",
-            "🃏 10.맞고(와플랫)",
-            "🎮 11.맞고(와플랫+게스트)",
-            "👤 12.맞고(게스트)",
+            "🔄 4.안부체크 변경(베이직)",
+            "🛡 5.안부체크 변경(세이프)",
+            "❤ 6.심혈관체크",
+            "😰 7.스트레스체크",
+            "💊 8.복약관리",
+            "🩺 9.건강상담",
+            "💬 10.생활상담",
+            "🃏 11.맞고(와플랫)",
+            "🎮 12.맞고(와플랫+게스트)",
+            "👤 13.맞고(게스트)",
             "🤖 AI 생활지원사",
+            "🚶 걸음수",
             "📝 자동 보고서",
             "📥 데이터 입력",
             "🗄 DB 뷰어",
@@ -566,33 +692,112 @@ LEGEND_BELOW = dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x
 LEGEND_BELOW_LARGE = dict(orientation="h", yanchor="top", y=-0.28, xanchor="center", x=0.5, font=dict(size=8))
 
 # 가입완료 20명 미만 소규모 지자체 — 범례 이름 앞에 ○ 표시
+# 수동 fallback (데이터 없을 때)
 _SMALL_AGENCIES = {"강원사회서비스원", "희망나래장애인복지관", "희망나래", "양양군청"}
 
-# 별표 표시 지자체
-_STAR_AGENCIES = {"광명시청", "양평군청", "정선군청", "제주시청", "서귀포시청", "고성군청"}
+# 별표 표시 지자체 (신규 계약)
+_STAR_AGENCIES = {"광명시청", "양평군청", "정선군청", "제주시청", "서귀포시청", "고성군청",
+                  "용인시청", "광주동구청", "용인시청통합돌봄"}
+
+# 자동 ○ 표시용 가입인원 캐시 (데이터 로드 후 갱신)
+_joined_count_cache: dict = {}
+
+def _update_joined_cache(reg_df) -> None:
+    """등록 현황 DataFrame으로 지자체별 가입인원 캐시 갱신 (20명 미만 → ○ 자동 표시)"""
+    global _joined_count_cache
+    if reg_df is None or reg_df.empty:
+        return
+    name_col  = "지자체명" if "지자체명" in reg_df.columns else None
+    count_col = "가입완료" if "가입완료" in reg_df.columns else None
+    if name_col and count_col:
+        for _, row in reg_df.iterrows():
+            n = str(row[name_col]).strip()
+            c = safe_numeric(row.get(count_col, 0))
+            if n:
+                _joined_count_cache[n] = int(c)
 
 def _mun_label(name: str) -> str:
+    # ① 자동: 실제 가입인원 20명 미만 → ○
+    joined = _joined_count_cache.get(name)
+    if joined is not None and joined < 20:
+        return f"○ {name}"
+    # ② fallback: 수동 세트
     if name in _SMALL_AGENCIES:
         return f"○ {name}"
+    # ③ 신규 지자체 → ★
     if name in _STAR_AGENCIES:
         return f"★ {name}"
     return name
 
+# ○ 자동 표시: 데이터 로드 완료 후 가입인원 캐시 갱신
+try:
+    _update_joined_cache(data.get("registration", pd.DataFrame()))
+except Exception:
+    pass
+
 # 권역 분류 및 색상 (전역 — 여러 페이지에서 공유)
 DETAIL_REGION = {
     "서초구청": "서울권", "강북구청": "서울권", "마포구청": "서울권", "광진구청": "서울권",
-    "경기도청": "경기권", "용인시청": "경기권", "포천시청": "경기권", "광명시청": "경기권", "양평군청": "경기권",
+    "경기도청": "경기권", "용인시청": "경기권", "용인시청통합돌봄": "경기권",
+    "포천시청": "경기권", "광명시청": "경기권", "양평군청": "경기권",
     "청주시청": "충청권", "진천군청": "충청권", "음성군청": "충청권", "괴산군청": "충청권",
     "증평군청": "충청권", "충북사회서비스원": "충청권", "충남사회서비스원": "충청권",
     "금정구청": "영남권", "경남사회서비스원": "영남권",
     "강릉시청": "강원권", "강원사회서비스원": "강원권", "홍천군청": "강원권",
     "삼척시청": "강원권", "양양군청": "강원권", "정선군청": "강원권", "고성군청": "강원권",
+    "광주동구청": "호남권",
     "독거노인지원종합센터": "기타", "희망나래장애인복지관": "기타",
     "제주시청": "제주권", "서귀포시청": "제주권",
 }
 REGION_COLORS = {
     "서울권": "#2F5496", "경기권": "#00897B", "충청권": "#E65100",
-    "영남권": "#6A1B9A", "강원권": "#00838F", "제주권": "#AD1457", "기타": "#757575",
+    "영남권": "#6A1B9A", "강원권": "#00838F", "호남권": "#558B2F",
+    "제주권": "#AD1457", "기타": "#757575",
+}
+
+# 지자체별 고유 색상 (20개+ 명확히 구분되는 색 — 권역 내에서도 차별화)
+MUNICIPALITY_COLORS = {
+    # 서울권 — 파랑 계열 (진→연)
+    "서초구청":             "#0D47A1",  # 짙은 남색
+    "강북구청":             "#1976D2",  # 파랑
+    "마포구청":             "#42A5F5",  # 하늘파랑
+    "광진구청":             "#90CAF9",  # 연파랑
+    # 경기권 — 초록 계열 (진→연)
+    "경기도청":             "#1B5E20",  # 짙은 초록
+    "용인시청":             "#388E3C",  # 초록
+    "용인시청통합돌봄":     "#66BB6A",  # 밝은 초록
+    "포천시청":             "#00695C",  # 청록초록
+    "광명시청":             "#26A69A",  # 청록
+    "양평군청":             "#80CBC4",  # 연청록
+    # 충청권 — 주황/갈색 계열 (진→연)
+    "청주시청":             "#BF360C",  # 짙은 벽돌
+    "진천군청":             "#E64A19",  # 진주황
+    "음성군청":             "#FF7043",  # 주황
+    "괴산군청":             "#9E6B00",  # 황갈색
+    "증평군청":             "#F9A825",  # 황금
+    "충북사회서비스원":     "#FF8F00",  # 앰버
+    "충남사회서비스원":     "#795548",  # 갈색
+    # 영남권 — 보라 계열
+    "금정구청":             "#4A148C",  # 짙은 보라
+    "경남사회서비스원":     "#8E24AA",  # 보라
+    # 강원권 — 청록/시안 계열 (진→연, 개별 구분)
+    "강릉시청":             "#006064",  # 짙은 청록
+    "강원사회서비스원":     "#00838F",  # 청록
+    "홍천군청":             "#00ACC1",  # 밝은 청록
+    "삼척시청":             "#0288D1",  # 하늘파랑 (강원이지만 파랑 계열로 분리)
+    "양양군청":             "#01579B",  # 짙은 하늘
+    "정선군청":             "#00BFA5",  # 청록민트
+    "고성군청":             "#26C6DA",  # 연사이안
+    # 호남권
+    "광주동구청":           "#558B2F",  # 올리브그린
+    # 제주권 — 빨강/핑크 계열
+    "제주시청":             "#B71C1C",  # 짙은 빨강
+    "서귀포시청":           "#E91E63",  # 핫핑크 (제주와 구분)
+    # 기타
+    "독거노인지원종합센터": "#546E7A",  # 청회색
+    "독거노인":             "#546E7A",
+    "희망나래장애인복지관": "#90A4AE",  # 연청회색
+    "희망나래":             "#90A4AE",
 }
 
 def plot_weekly_series(df, x_col, y_col, title, color="#2F5496", height=300):
@@ -879,34 +1084,42 @@ if page == "📋 Summary":
 
         st.markdown(f'<div class="section-header">📅 {selected_week}주차 ({summary.get("시작일", "")}) 운영 현황</div>', unsafe_allow_html=True)
 
-        # ── 임시 디버그 — Summary 상단에 자동으로 펼쳐집니다
-        with st.expander("🔧 디버그 (캡처 후 알려주세요)", expanded=True):
-            _cd_dbg = data.get("checkin_daily", pd.DataFrame())
-            _gdc_dbg = next((c for c in _cd_dbg.columns if "날짜" in str(c) or "date" in str(c).lower()), None)
-            st.write("① 날짜컬럼:", _gdc_dbg)
-            st.write("② 날짜값 샘플:", _cd_dbg[_gdc_dbg].head(3).tolist() if _gdc_dbg else "없음")
-            st.write("③ 안부미확인률 있음:", "안부미확인률" in _cd_dbg.columns)
-            st.write("④ _G_CR 키 수:", len(_G_CR), "| 샘플:", list(_G_CR.items())[-3:] if _G_CR else "비어있음")
-            st.write("⑤ selected_week:", selected_week)
-            st.write("⑥ summary 안부확인율:", summary.get("안부확인율", "미설정"))
-            st.write("⑦ summary 안부체크율:", summary.get("안부체크율", "미설정"))
-
-        # 회원가입 현황 (이용자현황 시트에서)
+        # 회원가입 현황 — 이용자주간 선택 주차 기준 (스냅샷 시트보다 최신)
         reg = data.get("registration", pd.DataFrame())
         total_contract = 0
         total_registered = 0
         total_incomplete = 0
-        if not reg.empty:
-            if "협약인원" in reg.columns:
-                total_contract = int(reg["협약인원"].sum())
-            if "가입완료" in reg.columns:
-                total_registered = int(reg["가입완료"].sum())
-            if "가입미완료" in reg.columns:
-                total_incomplete = int(reg["가입미완료"].sum())
-        total_reg_rate = round(total_registered / total_contract * 100, 1) if total_contract > 0 else 0
+
+        wu = data.get("weekly_users", pd.DataFrame())
+        total_reg_rate = 0
+        if not wu.empty and "주차" in wu.columns:
+            _wu_sel = wu[wu["주차"].astype(str).str.strip() == selected_week]
+            if _wu_sel.empty:
+                _wu_sel = wu.iloc[[-1]]
+            if not _wu_sel.empty:
+                _row = _wu_sel.iloc[0]
+                # 협약인원 (대상자수)
+                if "대상자수" in wu.columns:
+                    _v = safe_numeric(_row.get("대상자수", 0))
+                    if _v and _v > 0:
+                        total_contract = int(_v)
+                # 가입완료합계 — 이용자주간 해당 주차 값 우선 사용
+                if "가입완료합계" in wu.columns:
+                    _r = safe_numeric(_row.get("가입완료합계", 0))
+                    if _r and _r > 0:
+                        total_registered = int(_r)
+        # fallback: 이용자현황 스냅샷
+        if total_contract == 0 and not reg.empty and "협약인원" in reg.columns:
+            total_contract = int(reg["협약인원"].sum())
+        if total_registered == 0 and not reg.empty and "가입완료" in reg.columns:
+            total_registered = int(reg["가입완료"].sum())
+        if not reg.empty and "가입미완료" in reg.columns:
+            total_incomplete = total_contract - total_registered
+        # 가입률: 가입완료/대상자수 직접 계산
+        if total_contract > 0:
+            total_reg_rate = round(total_registered / total_contract * 100, 1)
 
         # 주간 데이터에서 전주 가입완료 수 가져오기
-        wu = data.get("weekly_users", pd.DataFrame())
         cur_registered = total_registered
         prev_registered = total_registered  # 기본값
         if not wu.empty and "주차" in wu.columns and "가입완료합계" in wu.columns:
@@ -1057,6 +1270,11 @@ if page == "📋 Summary":
             except:
                 safe_status = pd.DataFrame()
 
+            # 이번 주 신규 추가 (아직 집계 대상 아님)
+            _SAFE_EXCLUDE = {"다살림재가노인지원서비스센터"}
+            if not safe_status.empty and "agency_name" in safe_status.columns:
+                safe_status = safe_status[~safe_status["agency_name"].isin(_SAFE_EXCLUDE)]
+
             st.markdown('<div class="section-header">🛡 세이프 대상 지자체 현황</div>', unsafe_allow_html=True)
 
             if not safe_status.empty:
@@ -1102,10 +1320,31 @@ if page == "📋 Summary":
                     save_note("pending_agencies", _new_note)
                     st.success("저장됨")
 
-            # 파일 업로드 + 수동 편집
+            # 파일 업로드 + 로컬 경로 + 수동 편집
             _safe_expander_open = st.session_state.get("safe_expander_open", False)
             with st.expander("📤 세이프 현황 업데이트 (엑셀 업로드 또는 수동 편집)", expanded=_safe_expander_open):
-                upload_tab, manual_tab = st.tabs(["📁 엑셀 파일 업로드", "✏️ 수동 편집"])
+                upload_tab, path_tab, manual_tab = st.tabs(["📁 엑셀 파일 업로드", "📂 로컬 파일 경로 (VPN 우회)", "✏️ 수동 편집"])
+
+                with path_tab:
+                    st.caption("VPN으로 파일 업로드가 막힐 때 사용하세요. 서버가 파일을 직접 읽습니다.")
+                    _local_path = st.text_input(
+                        "엑셀 파일 경로 입력",
+                        placeholder=r"예) C:\Users\NHN\Downloads\계산용.xlsx",
+                        key="safe_local_path"
+                    )
+                    if st.button("📂 경로로 파일 읽기", key="safe_local_load"):
+                        import os
+                        if _local_path and os.path.exists(_local_path):
+                            with open(_local_path, "rb") as _f:
+                                st.session_state["safe_upload_bytes"] = _f.read()
+                                st.session_state["safe_upload_name"] = os.path.basename(_local_path)
+                                st.session_state["safe_expander_open"] = True
+                            st.success(f"✅ 파일 읽기 성공: {os.path.basename(_local_path)}")
+                            st.rerun()
+                        elif _local_path:
+                            st.error(f"❌ 파일을 찾을 수 없습니다: {_local_path}")
+                        else:
+                            st.warning("파일 경로를 입력해주세요.")
 
                 with upload_tab:
                     st.caption("계산용.xlsx 같은 엑셀 파일을 업로드하면 자동으로 반영됩니다.")
@@ -1291,11 +1530,28 @@ elif page == "👥 1.회원가입 & 이탈":
     if not reg.empty and "지자체명" in reg.columns:
         reg = reg.copy()
 
-        # 가입률: 항상 이용자현황 시트 기반으로 계산 (Summary와 동일 기준)
-        total_contract = int(reg["협약인원"].apply(safe_numeric).sum()) if "협약인원" in reg.columns else 0
-        total_registered = int(reg["가입완료"].apply(safe_numeric).sum()) if "가입완료" in reg.columns else 0
+        # 가입률: 이용자주간 선택 주차 기준 우선 (스냅샷보다 최신)
+        wu_kpi = data.get("weekly_users", pd.DataFrame())
+        total_contract = 0
+        total_registered = 0
+        if not wu_kpi.empty and "주차" in wu_kpi.columns:
+            _sel = wu_kpi[wu_kpi["주차"].astype(str).str.strip() == selected_week]
+            if _sel.empty:
+                _sel = wu_kpi.iloc[[-1]]
+            if not _sel.empty:
+                _r = _sel.iloc[0]
+                if "대상자수" in wu_kpi.columns:
+                    _v = safe_numeric(_r.get("대상자수", 0))
+                    if _v > 0: total_contract = int(_v)
+                if "가입완료합계" in wu_kpi.columns:
+                    _v = safe_numeric(_r.get("가입완료합계", 0))
+                    if _v > 0: total_registered = int(_v)
+        # fallback: 이용자현황 스냅샷
+        if total_contract == 0:
+            total_contract = int(reg["협약인원"].apply(safe_numeric).sum()) if "협약인원" in reg.columns else 0
+        if total_registered == 0:
+            total_registered = int(reg["가입완료"].apply(safe_numeric).sum()) if "가입완료" in reg.columns else 0
         total_rate = round(total_registered / total_contract * 100, 1) if total_contract > 0 else 0
-
         total_incomplete = total_contract - total_registered
 
         kcols = st.columns(4)
@@ -1332,12 +1588,9 @@ elif page == "👥 1.회원가입 & 이탈":
             if target_col and reg_col:
                 wu_chart[target_col] = wu_chart[target_col].apply(safe_numeric)
                 wu_chart[reg_col] = wu_chart[reg_col].apply(safe_numeric)
-                # 전체가입률: 항상 가입완료/대상자 직접 계산 (이용자현황 시트 기준과 통일)
-                if False:  # Google Sheets 전체가입률 컬럼은 사용하지 않음
-                    wu_chart["_rate"] = wu_chart["전체가입률"].apply(safe_numeric)
-                    # 0인 행은 직접 계산으로 보충
-                    mask = wu_chart["_rate"] == 0
-                    wu_chart.loc[mask, "_rate"] = (wu_chart.loc[mask, reg_col] / wu_chart.loc[mask, target_col].replace(0, float("nan")) * 100).round(1).fillna(0)
+                # 전체가입률: 가입완료/대상자수 직접 계산 (신규 지자체 포함 정확한 분모 반영)
+                if False:
+                    pass
                 elif "대상자수" in wu_chart.columns:
                     wu_chart["대상자수"] = wu_chart["대상자수"].apply(safe_numeric)
                     wu_chart["_rate"] = (wu_chart[reg_col] / wu_chart["대상자수"].replace(0, float("nan")) * 100).round(1).fillna(0)
@@ -1901,6 +2154,7 @@ elif page == "🖐 2.안부확인":
                 cd_trend["_날짜"] = cd_trend["_dt"].apply(lambda d: date_to_week_label(d.strftime("%Y-%m-%d")))
                 avg_cr = cd_trend.groupby("_날짜")["안부확인율"].mean().round(1).reset_index()
                 avg_cr = avg_cr.rename(columns={"_날짜": "시작일"})
+            avg_cr = avg_cr[avg_cr["시작일"].astype(str).str.startswith("26-")]
             if not avg_cr.empty:
                 fig = px.line(avg_cr, x="시작일", y="안부확인율", markers=True,
                               color_discrete_sequence=["#2F5496"])
@@ -1950,7 +2204,7 @@ elif page == "🖐 2.안부확인":
 # ============================================================
 # ❤ 심혈관체크
 # ============================================================
-elif page == "❤ 5.심혈관체크":
+elif page == "❤ 6.심혈관체크":
     st.markdown('<div class="section-header">❤ 심혈관체크</div>', unsafe_allow_html=True)
 
     p_start, p_end = page_week_range_selector("cardio", weeks)
@@ -2035,7 +2289,7 @@ elif page == "❤ 5.심혈관체크":
 # ============================================================
 # 💊 복약관리
 # ============================================================
-elif page == "💊 7.복약관리":
+elif page == "💊 8.복약관리":
     st.markdown('<div class="section-header">💊 복약관리</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("med", weeks)
 
@@ -2240,24 +2494,37 @@ elif page == "📊 3.안부체크율":
 
         # 기간 필터 적용 (날짜 원본으로 필터링 후, 시간순 정렬 → 주차 레이블 변환)
         cr = cr[(cr["시작일"] >= cr_date_start) & (cr["시작일"] <= cr_date_end)]
-        cr = cr.sort_values("시작일")
-        # ── 일별 → 주차 단위 중복 제거 (같은 주 같은 지자체는 마지막 행만 유지) ──
         cr["_week_key"] = cr["시작일"].apply(date_to_week_label)
+        # ── 일별 → 주차 단위 중복 제거 ──
+        # MZ~NW 시트 원본값(안부체크율_원본)이 있는 행(토요일)을 우선 보존.
+        # ISO 주차는 월~일이라 토요일이 마지막이 아닐 수 있으므로,
+        # _has_orig(원본 있음=1) 기준으로 정렬 후 keep="last" → 원본값 행이 선택됨.
+        if "안부체크율_원본" in cr.columns:
+            cr["_has_orig"] = cr["안부체크율_원본"].fillna(0).gt(0).astype(int)
+        else:
+            cr["_has_orig"] = 0
+        cr = cr.sort_values(["_has_orig", "시작일"])  # 원본 있는 행이 뒤로 → keep="last" 선택
         cr = cr.drop_duplicates(subset=["_week_key", "지자체명"], keep="last")
-        cr = cr.drop(columns=["_week_key"])
+        cr = cr.drop(columns=["_week_key", "_has_orig"])
+        cr = cr.sort_values("시작일")
         cr = week_label_df(cr, "시작일")
 
-        # 현재 활성 지자체만 필터링 (계약 종료된 마포구청 등 제외)
-        active_list = get_active_agencies_for_week(selected_week) if selected_week else []
-        if active_list:
-            def _match_active(name):
-                if name in active_list:
-                    return True
-                for a in active_list:
-                    if name in a or a in name:
+        # 현재 활성 지자체만 필터링 — 이용자현황 시트 기준 24개
+        _reg_df = data.get("registration", pd.DataFrame())
+        _active_from_reg = []
+        if not _reg_df.empty and "지자체명" in _reg_df.columns:
+            _active_from_reg = _reg_df["지자체명"].dropna().str.strip().tolist()
+
+        if _active_from_reg:
+            def _match_active_reg(name):
+                """공백 제거 후 부분 매칭 (예: '용인시청통합돌봄' ↔ '용인시청 통합돌봄')"""
+                name_n = str(name).replace(" ", "")
+                for a in _active_from_reg:
+                    a_n = str(a).replace(" ", "")
+                    if name_n == a_n or name_n in a_n or a_n in name_n:
                         return True
                 return False
-            cr = cr[cr["지자체명"].apply(_match_active)]
+            cr = cr[cr["지자체명"].apply(_match_active_reg)]
 
         regions = sorted(cr["권역"].unique())
         tab_labels = ["전체 비교"] + regions
@@ -2300,8 +2567,12 @@ elif page == "📊 3.안부체크율":
                 st.markdown(f"**{region}** — {', '.join(mun_list)}")
                 region_data["지자체명"] = region_data["지자체명"].apply(_mun_label)
 
+                # 지자체별 고유 색상 매핑 (label 적용 후 기준)
+                _region_color_map = {row: MUNICIPALITY_COLORS.get(
+                    str(row).lstrip("★○ "), MUNICIPALITY_COLORS.get(str(row), "#888888")
+                ) for row in region_data["지자체명"].unique()}
                 fig = px.line(region_data, x="시작일", y="안부체크율", color="지자체명",
-                              markers=True, color_discrete_sequence=px.colors.qualitative.Set2)
+                              markers=True, color_discrete_map=_region_color_map)
                 fig.update_layout(
                     title=f"{region} 안부체크율 추이", height=400,
                     hovermode="x unified",
@@ -2378,7 +2649,7 @@ elif page == "📊 3.안부체크율":
 # ============================================================
 # 🔄 4.안부체크 변경
 # ============================================================
-elif page == "🔄 4.안부체크 변경":
+elif page == "🔄 4.안부체크 변경(베이직)":
     st.markdown('<div class="section-header">🔄 안부체크 변경건</div>', unsafe_allow_html=True)
     st.markdown("""
     <div class="insight-box">
@@ -2406,7 +2677,7 @@ elif page == "🔄 4.안부체크 변경":
         # 날짜 목록 추출
         all_change_dates = sorted([str(d).strip() for d in df[date_col].dropna().unique() if str(d).strip() and str(d).strip() != "nan"])
 
-        tab_basic, tab_safe, tab_input = st.tabs(["📊 베이직 (안부상태 변경)", "🛡 세이프 (KT 관제)", "✏ 데이터 입력"])
+        tab_basic, tab_input = st.tabs(["📊 베이직 (안부상태 변경)", "✏ 데이터 입력"])
 
         with tab_basic:
             # === 베이직: 안부상태 변경건 ===
@@ -2509,149 +2780,6 @@ elif page == "🔄 4.안부체크 변경":
                     )
                     st.plotly_chart(fig2, use_container_width=True)
 
-        with tab_safe:
-            # === 세이프: KT 관제 ===
-
-            # 📅 기간 선택 (기본: 2026-03-01)
-            safe_default = "2026-03-01"
-            safe_idx = 0
-            for i, d in enumerate(all_change_dates):
-                if d >= safe_default:
-                    safe_idx = i
-                    break
-            with st.expander("📅 세이프 기간 설정 (펼쳐서 변경)", expanded=False):
-                sc1, sc2 = st.columns(2)
-                with sc1:
-                    safe_start = st.selectbox("시작일", all_change_dates, index=safe_idx, key="safe_change_start")
-                with sc2:
-                    ss_idx = all_change_dates.index(safe_start) if safe_start in all_change_dates else 0
-                    safe_end_opts = all_change_dates[ss_idx:]
-                    safe_end = st.selectbox("종료일", safe_end_opts, index=len(safe_end_opts)-1, key="safe_change_end")
-                st.caption(f"세이프 기간: {safe_start} ~ {safe_end}")
-
-            # 기간 필터 적용
-            df_safe = df[(df[date_col].astype(str) >= safe_start) & (df[date_col].astype(str) <= safe_end)].copy()
-            df_safe = shorten_dates_in_df(df_safe, date_col)
-
-            kt_total_col = None
-            kt_send_col = None
-            kt_rate_col = None
-            kt_mun_rate_cols = []
-
-            for c in df_safe.columns:
-                cl = str(c).replace("\n", "").strip()
-                if cl == "KT 관제 수":
-                    kt_total_col = c
-                elif cl == "전체 발송수":
-                    kt_send_col = c
-                elif cl == "KT 관제 대응률":
-                    kt_rate_col = c
-                elif "KT관제 대응률" in cl and cl != "KT 관제 대응률":
-                    kt_mun_rate_cols.append(c)
-
-            # 1. KT 관제 수 + 전체 발송수 + 대응률
-            if kt_total_col and kt_send_col:
-                df_safe[kt_total_col] = df_safe[kt_total_col].apply(safe_numeric)
-                df_safe[kt_send_col] = df_safe[kt_send_col].apply(safe_numeric)
-
-                fig3 = make_subplots(specs=[[{"secondary_y": True}]])
-                fig3.add_trace(go.Bar(
-                    x=df_safe[date_col], y=df_safe[kt_send_col], name="전체 발송수",
-                    marker_color="#B0BEC5", opacity=0.6,
-                    hovertemplate="%{y:,.0f}건<extra>전체 발송수</extra>"
-                ), secondary_y=False)
-                fig3.add_trace(go.Bar(
-                    x=df_safe[date_col], y=df_safe[kt_total_col], name="KT 관제 수",
-                    marker_color="#1565C0",
-                    hovertemplate="%{y:,.0f}건<extra>KT 관제 수</extra>"
-                ), secondary_y=False)
-
-                if kt_rate_col:
-                    df_safe[kt_rate_col] = df_safe[kt_rate_col].apply(safe_numeric)
-                    fig3.add_trace(go.Scatter(
-                        x=df_safe[date_col], y=df_safe[kt_rate_col], name="KT 관제 대응률",
-                        mode="lines+markers", line=dict(color="#D32F2F", width=2),
-                        hovertemplate="%{y:.1f}%<extra>KT 관제 대응률</extra>"
-                    ), secondary_y=True)
-
-                fig3.update_layout(
-                    title="세이프 - KT 관제 현황", height=400,
-                    xaxis=dict(type="category"), hovermode="x unified",
-                    barmode="group",
-                    margin=dict(t=40, b=60, l=40, r=40),
-                    legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
-                )
-                fig3.update_yaxes(title_text="건수", secondary_y=False)
-                fig3.update_yaxes(title_text="%", secondary_y=True)
-                st.plotly_chart(fig3, use_container_width=True)
-
-            # 2. 지자체별 관제 수 + 출동 수
-            ktt_control_cols = []
-            ktt_dispatch_cols = []
-            for c in df_safe.columns:
-                cl = str(c).replace("\n", "").strip()
-                if cl.startswith("KTT_관제_"):
-                    ktt_control_cols.append(c)
-                elif cl.startswith("KTT_출동_"):
-                    ktt_dispatch_cols.append(c)
-
-            if ktt_control_cols:
-                # 관제 수 데이터
-                ctrl_rows = []
-                disp_rows = []
-                for _, row in df_safe.iterrows():
-                    d = str(row.get(date_col, "")).strip()
-                    if not d or d == "nan":
-                        continue
-                    for cc in ktt_control_cols:
-                        mun = str(cc).replace("KTT_관제_", "").strip()
-                        val = safe_numeric(row.get(cc, 0))
-                        if val > 0 or mun not in ["마포구청", "광진구청"]:  # 종료 지자체 제외
-                            ctrl_rows.append({"날짜": d, "지자체명": mun, "관제수": val})
-                    for dc in ktt_dispatch_cols:
-                        mun = str(dc).replace("KTT_출동_", "").strip()
-                        val = safe_numeric(row.get(dc, 0))
-                        if val > 0 or mun not in ["마포구청", "광진구청"]:
-                            disp_rows.append({"날짜": d, "지자체명": mun, "출동수": val})
-
-                st.markdown('<div class="section-header">지자체별 KT 관제 수</div>', unsafe_allow_html=True)
-                if ctrl_rows:
-                    ctrl_df = pd.DataFrame(ctrl_rows)
-                    # 활성 지자체만 (데이터 있는 것만)
-                    active_muns = ctrl_df.groupby("지자체명")["관제수"].sum()
-                    active_muns = active_muns[active_muns > 0].index.tolist()
-                    ctrl_df = ctrl_df[ctrl_df["지자체명"].isin(active_muns)].copy()
-                    ctrl_df["지자체명"] = ctrl_df["지자체명"].apply(_mun_label)
-
-                    fig4 = px.bar(ctrl_df, x="날짜", y="관제수", color="지자체명",
-                                  barmode="group", height=400)
-                    fig4.update_layout(
-                        title="지자체별 주차별 KT 관제 수",
-                        xaxis=dict(type="category"), hovermode="x unified",
-                        legend=LEGEND_BELOW, margin=dict(t=40, b=70),
-                    )
-                    fig4.update_traces(hovertemplate="<b>%{x}</b><br>%{y:,.0f}건<extra>%{fullData.name}</extra>")
-                    st.plotly_chart(fig4, use_container_width=True)
-
-                st.markdown('<div class="section-header">지자체별 KT 출동 수</div>', unsafe_allow_html=True)
-                if disp_rows:
-                    disp_df = pd.DataFrame(disp_rows)
-                    active_muns_d = disp_df.groupby("지자체명")["출동수"].sum()
-                    active_muns_d = active_muns_d[active_muns_d > 0].index.tolist()
-                    if active_muns_d:
-                        disp_df = disp_df[disp_df["지자체명"].isin(active_muns_d)].copy()
-                        disp_df["지자체명"] = disp_df["지자체명"].apply(_mun_label)
-                        fig5 = px.bar(disp_df, x="날짜", y="출동수", color="지자체명",
-                                      barmode="group", height=400)
-                        fig5.update_layout(
-                            title="지자체별 주차별 KT 출동 수",
-                            xaxis=dict(type="category"), hovermode="x unified",
-                            legend=LEGEND_BELOW, margin=dict(t=40, b=70),
-                        )
-                        fig5.update_traces(hovertemplate="<b>%{x}</b><br>%{y:,.0f}건<extra>%{fullData.name}</extra>")
-                        st.plotly_chart(fig5, use_container_width=True)
-                    else:
-                        st.info("출동 데이터가 없습니다.")
 
         with tab_input:
             # 수동 입력 폼 (개인정보 데이터)
@@ -2694,9 +2822,224 @@ elif page == "🔄 4.안부체크 변경":
 
 
 # ============================================================
-# 🎮 11.맞고(와플랫+게스트)
+# 🛡 5.관제 현황
 # ============================================================
-elif page == "🎮 11.맞고(와플랫+게스트)":
+elif page == "🛡 5.안부체크 변경(세이프)":
+    st.markdown('<div class="section-header">🛡 안부체크 변경(세이프) — KT 관제</div>', unsafe_allow_html=True)
+
+    # ── KT 관제 차트 (안부체크횟수 시트에서) ─────────────────────────
+    _safe_raw = sheets.get("안부체크횟수", pd.DataFrame())
+    if not _safe_raw.empty:
+        _sf = _safe_raw.copy()
+        _sf_date_col = None
+        for _c in _sf.columns:
+            if "시작일" in str(_c).replace("\n", "").strip():
+                _sf_date_col = _c
+                break
+        if _sf_date_col is None:
+            _sf_date_col = _sf.columns[0]
+
+        _all_safe_dates = sorted([str(d).strip() for d in _sf[_sf_date_col].dropna().unique()
+                                   if str(d).strip() and str(d).strip() != "nan"])
+
+        _safe_default = "2026-03-01"
+        _safe_idx = next((i for i, d in enumerate(_all_safe_dates) if d >= _safe_default), 0)
+        with st.expander("📅 기간 설정 (펼쳐서 변경)", expanded=False):
+            _sc1, _sc2 = st.columns(2)
+            with _sc1:
+                _safe_start = st.selectbox("시작일", _all_safe_dates, index=_safe_idx, key="p5_safe_start")
+            with _sc2:
+                _ss_idx = _all_safe_dates.index(_safe_start) if _safe_start in _all_safe_dates else 0
+                _safe_end_opts = _all_safe_dates[_ss_idx:]
+                _safe_end = st.selectbox("종료일", _safe_end_opts, index=len(_safe_end_opts)-1, key="p5_safe_end")
+            st.caption(f"기간: {_safe_start} ~ {_safe_end}")
+
+        _df_safe = _sf[(_sf[_sf_date_col].astype(str) >= _safe_start) &
+                       (_sf[_sf_date_col].astype(str) <= _safe_end)].copy()
+        _df_safe = shorten_dates_in_df(_df_safe, _sf_date_col)
+
+        kt_total_col = kt_send_col = kt_rate_col = kt_mgmt_rate_col = kt_disp_rate_col = None
+        kt_mun_rate_cols = []
+        for _c in _df_safe.columns:
+            _cl_raw = str(_c).replace("\n", "").strip()
+            _cl_low = _cl_raw.replace(" ", "").lower()
+            if _cl_raw == "KT 관제 수":
+                kt_total_col = _c
+            elif _cl_raw == "전체 발송수":
+                kt_send_col = _c
+            elif _cl_raw == "KT 관제 대응률":
+                kt_rate_col = _c
+            elif "KT관제 대응률" in _cl_raw and _cl_raw != "KT 관제 대응률":
+                kt_mun_rate_cols.append(_c)
+            if "kt관제율" in _cl_low:
+                kt_mgmt_rate_col = _c
+            elif "kt출동율" in _cl_low or "kt출동률" in _cl_low:
+                kt_disp_rate_col = _c
+
+        # KT 관제율 · 출동율 추이
+        if kt_mgmt_rate_col or kt_disp_rate_col:
+            st.markdown('<div class="section-header">📡 KT 관제율 · 출동율</div>', unsafe_allow_html=True)
+            _fig_kt_rate = go.Figure()
+            if kt_mgmt_rate_col:
+                _df_safe[kt_mgmt_rate_col] = _df_safe[kt_mgmt_rate_col].apply(safe_numeric)
+                _kt_mgmt = _df_safe[_df_safe[kt_mgmt_rate_col] > 0]
+                _fig_kt_rate.add_trace(go.Scatter(
+                    x=_kt_mgmt[_sf_date_col], y=_kt_mgmt[kt_mgmt_rate_col],
+                    name="KT 관제율", mode="lines+markers",
+                    line=dict(color="#1565C0", width=2.5), marker=dict(size=7),
+                    hovertemplate="<b>%{x}</b><br>KT 관제율: <b>%{y:.1f}%</b><extra></extra>"
+                ))
+            if kt_disp_rate_col:
+                _df_safe[kt_disp_rate_col] = _df_safe[kt_disp_rate_col].apply(safe_numeric)
+                _kt_disp = _df_safe[_df_safe[kt_disp_rate_col] > 0]
+                if not _kt_disp.empty:
+                    _fig_kt_rate.add_trace(go.Scatter(
+                        x=_kt_disp[_sf_date_col], y=_kt_disp[kt_disp_rate_col],
+                        name="KT 출동율", mode="lines+markers",
+                        line=dict(color="#E65100", width=2.5, dash="dot"), marker=dict(size=7, symbol="diamond"),
+                        hovertemplate="<b>%{x}</b><br>KT 출동율: <b>%{y:.1f}%</b><extra></extra>"
+                    ))
+            _fig_kt_rate.update_layout(
+                title="KT 관제율 · 출동율 추이", height=380,
+                xaxis=dict(type="category", title=""), yaxis=dict(title="%", ticksuffix="%"),
+                hovermode="x unified", margin=dict(t=40, b=60, l=50, r=20),
+                legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5),
+            )
+            st.plotly_chart(_fig_kt_rate, use_container_width=True)
+
+        # KT 관제 수 + 전체 발송수 + 대응률
+        if kt_total_col and kt_send_col:
+            _df_safe[kt_total_col] = _df_safe[kt_total_col].apply(safe_numeric)
+            _df_safe[kt_send_col] = _df_safe[kt_send_col].apply(safe_numeric)
+            _fig3 = make_subplots(specs=[[{"secondary_y": True}]])
+            _fig3.add_trace(go.Bar(x=_df_safe[_sf_date_col], y=_df_safe[kt_send_col], name="전체 발송수",
+                                   marker_color="#B0BEC5", opacity=0.6,
+                                   hovertemplate="%{y:,.0f}건<extra>전체 발송수</extra>"), secondary_y=False)
+            _fig3.add_trace(go.Bar(x=_df_safe[_sf_date_col], y=_df_safe[kt_total_col], name="KT 관제 수",
+                                   marker_color="#1565C0",
+                                   hovertemplate="%{y:,.0f}건<extra>KT 관제 수</extra>"), secondary_y=False)
+            if kt_rate_col:
+                _df_safe[kt_rate_col] = _df_safe[kt_rate_col].apply(safe_numeric)
+                _fig3.add_trace(go.Scatter(x=_df_safe[_sf_date_col], y=_df_safe[kt_rate_col], name="KT 관제 대응률",
+                                           mode="lines+markers", line=dict(color="#D32F2F", width=2),
+                                           hovertemplate="%{y:.1f}%<extra>KT 관제 대응률</extra>"), secondary_y=True)
+            _fig3.update_layout(title="세이프 - KT 관제 현황", height=400,
+                                xaxis=dict(type="category"), hovermode="x unified", barmode="group",
+                                margin=dict(t=40, b=60, l=40, r=40),
+                                legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
+            _fig3.update_yaxes(title_text="건수", secondary_y=False)
+            _fig3.update_yaxes(title_text="%", secondary_y=True)
+            st.plotly_chart(_fig3, use_container_width=True)
+
+        # 지자체별 KT 관제/출동 수
+        _ktt_ctrl_cols = [_c for _c in _df_safe.columns if str(_c).replace("\n","").strip().startswith("KTT_관제_")]
+        _ktt_disp_cols = [_c for _c in _df_safe.columns if str(_c).replace("\n","").strip().startswith("KTT_출동_")]
+        _EXCL_MUNS = {"마포구청", "광진구청"}
+        if _ktt_ctrl_cols:
+            _ctrl_rows, _disp_rows = [], []
+            for _, _row in _df_safe.iterrows():
+                _d = str(_row.get(_sf_date_col, "")).strip()
+                if not _d or _d == "nan":
+                    continue
+                for _cc in _ktt_ctrl_cols:
+                    _mun = str(_cc).replace("\n","").strip().replace("KTT_관제_","").strip()
+                    if _mun not in _EXCL_MUNS:
+                        _ctrl_rows.append({"날짜": _d, "지자체명": _mun, "관제수": safe_numeric(_row.get(_cc, 0))})
+                for _dc in _ktt_disp_cols:
+                    _mun = str(_dc).replace("\n","").strip().replace("KTT_출동_","").strip()
+                    if _mun not in _EXCL_MUNS:
+                        _disp_rows.append({"날짜": _d, "지자체명": _mun, "출동수": safe_numeric(_row.get(_dc, 0))})
+            if _ctrl_rows:
+                _ctrl_muns = {r["지자체명"] for r in _ctrl_rows}
+                _disp_muns = {r["지자체명"] for r in _disp_rows}
+                for _mun in _ctrl_muns - _disp_muns:
+                    for _d in sorted({r["날짜"] for r in _ctrl_rows}):
+                        _disp_rows.append({"날짜": _d, "지자체명": _mun, "출동수": 0})
+
+            st.markdown('<div class="section-header">지자체별 KT 관제 수</div>', unsafe_allow_html=True)
+            if _ctrl_rows:
+                _ctrl_df = pd.DataFrame(_ctrl_rows)
+                _mun_total = _ctrl_df.groupby("지자체명")["관제수"].sum().sort_values(ascending=False)
+                _mun_order = _mun_total.index.tolist()
+                _ctrl_color_map = {_mun_label(m): MUNICIPALITY_COLORS.get(m, "#888888") for m in _mun_order}
+                _ctrl_df["지자체명"] = _ctrl_df["지자체명"].apply(_mun_label)
+                _mun_order_lbl = [_mun_label(m) for m in _mun_order]
+                _fig4 = px.bar(_ctrl_df, x="날짜", y="관제수", color="지자체명", barmode="stack", height=500,
+                               color_discrete_map=_ctrl_color_map,
+                               category_orders={"지자체명": _mun_order_lbl[::-1]})
+                _fig4.update_layout(title="지자체별 주차별 KT 관제 수", xaxis=dict(type="category", title=""),
+                                    yaxis=dict(title="관제 수 (건)"), hovermode="closest",
+                                    legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5,
+                                                font=dict(size=10), tracegroupgap=2),
+                                    margin=dict(t=40, b=160, r=20))
+                _fig4.update_traces(hovertemplate="<b>%{fullData.name}</b><br>날짜: %{x}<br>관제 수: <b>%{y:,.0f}건</b><extra></extra>")
+                st.plotly_chart(_fig4, use_container_width=True)
+                _latest_d = _ctrl_df["날짜"].max()
+                _latest_ctrl = _ctrl_df[_ctrl_df["날짜"] == _latest_d].sort_values("관제수", ascending=True)
+                if not _latest_ctrl.empty:
+                    _fig4b = px.bar(_latest_ctrl, y="지자체명", x="관제수", orientation="h",
+                                    color="관제수", color_continuous_scale="Blues",
+                                    height=max(280, len(_latest_ctrl)*28), text="관제수")
+                    _fig4b.update_layout(title=f"최신 주차({_latest_d}) 지자체별 KT 관제 수",
+                                         xaxis=dict(title="관제 수 (건)"), yaxis=dict(title=""),
+                                         coloraxis_showscale=False, margin=dict(t=40, b=10, l=10, r=60))
+                    _fig4b.update_traces(textposition="outside", texttemplate="%{x:,.0f}건",
+                                         hovertemplate="<b>%{y}</b><br>관제 수: <b>%{x:,.0f}건</b><extra></extra>")
+                    st.plotly_chart(_fig4b, use_container_width=True)
+
+            st.markdown('<div class="section-header">지자체별 KT 출동 수</div>', unsafe_allow_html=True)
+            if _disp_rows:
+                _disp_df = pd.DataFrame(_disp_rows)
+                _mun_total_d = _disp_df.groupby("지자체명")["출동수"].sum().sort_values(ascending=False)
+                if not _mun_total_d.empty:
+                    _mun_order_d = _mun_total_d.index.tolist()
+                    _disp_color_map = {_mun_label(m): MUNICIPALITY_COLORS.get(m, "#888888") for m in _mun_order_d}
+                    _disp_df["지자체명"] = _disp_df["지자체명"].apply(_mun_label)
+                    _mun_order_d_lbl = [_mun_label(m) for m in _mun_order_d]
+                    _fig5 = px.bar(_disp_df, x="날짜", y="출동수", color="지자체명", barmode="stack", height=500,
+                                   color_discrete_map=_disp_color_map,
+                                   category_orders={"지자체명": _mun_order_d_lbl[::-1]})
+                    _fig5.update_layout(title="지자체별 주차별 KT 출동 수", xaxis=dict(type="category", title=""),
+                                        yaxis=dict(title="출동 수 (건)"), hovermode="closest",
+                                        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5,
+                                                    font=dict(size=10), tracegroupgap=2),
+                                        margin=dict(t=40, b=160, r=20))
+                    _fig5.update_traces(hovertemplate="<b>%{fullData.name}</b><br>날짜: %{x}<br>출동 수: <b>%{y:,.0f}건</b><extra></extra>")
+                    st.plotly_chart(_fig5, use_container_width=True)
+                    _latest_d2 = _disp_df["날짜"].max()
+                    _latest_disp = _disp_df[_disp_df["날짜"] == _latest_d2].sort_values("출동수", ascending=True)
+                    if not _latest_disp.empty:
+                        _fig5b = px.bar(_latest_disp, y="지자체명", x="출동수", orientation="h",
+                                        color="출동수", color_continuous_scale="Oranges",
+                                        height=max(280, len(_latest_disp)*28), text="출동수")
+                        _fig5b.update_layout(title=f"최신 주차({_latest_d2}) 지자체별 KT 출동 수",
+                                             xaxis=dict(title="출동 수 (건)"), yaxis=dict(title=""),
+                                             coloraxis_showscale=False, margin=dict(t=40, b=10, l=10, r=60))
+                        _fig5b.update_traces(textposition="outside", texttemplate="%{x:,.0f}건",
+                                             hovertemplate="<b>%{y}</b><br>출동 수: <b>%{x:,.0f}건</b><extra></extra>")
+                        st.plotly_chart(_fig5b, use_container_width=True)
+
+    st.markdown("---")
+    st.markdown('<div class="section-header">📊 관제 현황 대시보드</div>', unsafe_allow_html=True)
+    import streamlit.components.v1 as _components
+    from pathlib import Path as _Path
+    import datetime as _dt
+    # update.ps1 이 빌드 후 앱 폴더로 복사해 둔 사본을 우선 사용, 없으면 원본 경로
+    _html = _Path(__file__).parent / "gwanje_dashboard.html"
+    if not _html.exists():
+        _html = _Path(r"C:\Users\NHN\_bmad\waplat-gwanje\dashboard.html")
+    if _html.exists():
+        _mt = _dt.datetime.fromtimestamp(_html.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        st.caption(f"📄 출처: WAPLAT 관제 시트 · 최종 갱신 {_mt} · 주간 자동화: update.ps1")
+        _components.html(_html.read_text(encoding="utf-8"), height=1200, scrolling=True)
+    else:
+        st.warning("관제 현황 데이터가 아직 생성되지 않았습니다. `_bmad/waplat-gwanje/update.ps1`을 먼저 실행하세요.")
+
+
+# ============================================================
+# 🎮 12.맞고(와플랫+게스트)
+# ============================================================
+elif page == "🎮 12.맞고(와플랫+게스트)":
     st.markdown('<div class="section-header">🎮 맞고 (와플랫+게스트)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_all", weeks)
 
@@ -2791,9 +3134,9 @@ elif page == "🎮 11.맞고(와플랫+게스트)":
 
 
 # ============================================================
-# 🃏 10.맞고(와플랫)
+# 🃏 11.맞고(와플랫)
 # ============================================================
-elif page == "🃏 10.맞고(와플랫)":
+elif page == "🃏 11.맞고(와플랫)":
     st.markdown('<div class="section-header">🃏 맞고 (와플랫)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_waflat", weeks)
 
@@ -2870,9 +3213,9 @@ elif page == "🃏 10.맞고(와플랫)":
 
 
 # ============================================================
-# 👤 12.맞고(게스트)
+# 👤 13.맞고(게스트)
 # ============================================================
-elif page == "👤 12.맞고(게스트)":
+elif page == "👤 13.맞고(게스트)":
     st.markdown('<div class="section-header">👤 맞고 (게스트)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_guest", weeks)
 
@@ -2933,7 +3276,7 @@ elif page == "👤 12.맞고(게스트)":
 # ============================================================
 # 😰 스트레스체크
 # ============================================================
-elif page == "😰 6.스트레스체크":
+elif page == "😰 7.스트레스체크":
     st.markdown('<div class="section-header">😰 스트레스체크</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("stress", weeks)
 
@@ -3049,35 +3392,22 @@ elif page == "🤖 AI 생활지원사":
         existing_weeks = set(ai_chart["주차"].tolist())
         missing_weeks = [w for w in ["26-08", "26-09", "26-10"] if w not in existing_weeks]
 
-        tab5, tab1, tab2, tab3, tab4 = st.tabs(["🏛 지자체별 비교", "참여율 추이 (%)", "참여 인원 (명)", "월별 추이", "상세 데이터"])
+        tab3, tab5, tab1, tab2, tab4 = st.tabs(["📅 월별 추이", "🏛 지자체별 비교", "참여율 추이 (%)", "참여 인원 (명)", "상세 데이터"])
 
         with tab1:
-            # 인트로율 + 서비스율 + 프로그램 완료율
+            # 주차별 인트로 참여율만 표시 (전화 수신 = 주간 지표)
+            # 프로그램 완료·서비스 이용률은 월간 지표이므로 월별 탭에서 확인
             fig = go.Figure()
 
             if "인트로율" in cols_map:
+                _intro_cnt = ai_chart[cols_map["인트로수"]].apply(safe_numeric).fillna(0).round().astype(int) if "인트로수" in cols_map else pd.Series([0]*len(ai_chart))
                 fig.add_trace(go.Scatter(
                     x=ai_chart["주차"], y=ai_chart[cols_map["인트로율"]],
                     name="인트로 참여율 (전화 수신)",
                     mode="lines+markers",
                     line=dict(color="#7B1FA2", width=2.5),
-                    hovertemplate="<b>%{x}</b><br>인트로: %{y:.1f}%<extra></extra>"
-                ))
-            if "서비스율" in cols_map:
-                fig.add_trace(go.Scatter(
-                    x=ai_chart["주차"], y=ai_chart[cols_map["서비스율"]],
-                    name="서비스 이용율",
-                    mode="lines+markers",
-                    line=dict(color="#00897B", width=2.5),
-                    hovertemplate="<b>%{x}</b><br>서비스: %{y:.1f}%<extra></extra>"
-                ))
-            if "완료율" in cols_map:
-                fig.add_trace(go.Scatter(
-                    x=ai_chart["주차"], y=ai_chart[cols_map["완료율"]],
-                    name="프로그램 완료율",
-                    mode="lines+markers",
-                    line=dict(color="#E91E63", width=2.5),
-                    hovertemplate="<b>%{x}</b><br>완료: %{y:.1f}%<extra></extra>"
+                    customdata=_intro_cnt,
+                    hovertemplate="<b>%{x}</b><br>인트로: %{y:.1f}% (%{customdata}명 수신)<extra></extra>"
                 ))
 
             # 지자체 구분 annotation
@@ -3085,7 +3415,7 @@ elif page == "🤖 AI 생활지원사":
                                showarrow=False, font=dict(size=9, color="#999"),
                                bgcolor="rgba(255,255,255,0.8)", bordercolor="#ccc", borderwidth=1)
 
-            # 각 주차별 회원수 표시 (X축 위에 annotation)
+            # 각 주차별 회원수 표시 (X축 아래 annotation)
             if "회원수" in cols_map:
                 for _, row in ai_chart.iterrows():
                     w = row["주차"]
@@ -3098,16 +3428,17 @@ elif page == "🤖 AI 생활지원사":
                         )
 
             fig.update_layout(
-                title="AI 생활지원사 참여율 추이 (인트로 → 서비스 → 프로그램 완료)",
-                height=480, hovermode="x unified",
+                title="주차별 인트로 참여율 (전화 수신률) — 프로그램·서비스 지표는 월별 탭 참고",
+                height=460, hovermode="x unified",
                 xaxis=dict(type="category", title=""),
-                yaxis=dict(title="참여율 (%)", range=[-5, 60]),
-                legend=LEGEND_BELOW, margin=dict(t=40, b=80),
+                yaxis=dict(title="인트로 참여율 (%)", range=[-5, 100]),
+                legend=LEGEND_BELOW, margin=dict(t=50, b=80),
             )
+            st.info("📞 인트로(전화 수신)는 주1회 통화 기반의 주간 지표입니다. 프로그램 완료율·서비스 이용률은 월간 지표이므로 **월별 추이 탭**에서 확인하세요.", icon=None)
             st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
-            # 인원수 바 차트
+            # 주차별 인트로 수신 인원수 (전화 받은 명수)
             fig2 = make_subplots(specs=[[{"secondary_y": True}]])
 
             if "회원수" in cols_map:
@@ -3115,30 +3446,17 @@ elif page == "🤖 AI 생활지원사":
                     x=ai_chart["주차"], y=ai_chart[cols_map["회원수"]],
                     name="전체 회원수", mode="lines+markers",
                     line=dict(color="#9E9E9E", width=1, dash="dot"),
-                    hovertemplate="%{y:,}명<extra>회원수</extra>"
+                    hovertemplate="%{y:,}명<extra>전체 회원수</extra>"
                 ), secondary_y=True)
 
             if "인트로수" in cols_map:
+                _intro_vals = ai_chart[cols_map["인트로수"]].apply(safe_numeric).fillna(0)
                 fig2.add_trace(go.Bar(
-                    x=ai_chart["주차"], y=ai_chart[cols_map["인트로수"]],
-                    name="인트로 (전화 수신)", marker_color="#7B1FA2",
-                    text=ai_chart[cols_map["인트로수"]].apply(lambda x: f"{int(x)}"),
-                    textposition="outside", textfont=dict(size=8),
-                    hovertemplate="%{y:,.0f}명<extra>인트로</extra>"
-                ), secondary_y=False)
-
-            if "서비스수" in cols_map:
-                fig2.add_trace(go.Bar(
-                    x=ai_chart["주차"], y=ai_chart[cols_map["서비스수"]],
-                    name="서비스 이용", marker_color="#00897B",
-                    hovertemplate="%{y:,.0f}명<extra>서비스</extra>"
-                ), secondary_y=False)
-
-            if "완료수" in cols_map:
-                fig2.add_trace(go.Bar(
-                    x=ai_chart["주차"], y=ai_chart[cols_map["완료수"]],
-                    name="프로그램 완료", marker_color="#E91E63",
-                    hovertemplate="%{y:,.0f}명<extra>완료</extra>"
+                    x=ai_chart["주차"], y=_intro_vals,
+                    name="인트로 수신 인원 (전화 받음)", marker_color="#7B1FA2",
+                    text=_intro_vals.apply(lambda x: f"{int(x)}명" if x > 0 else ""),
+                    textposition="outside", textfont=dict(size=10),
+                    hovertemplate="<b>%{x}</b><br>전화 수신: <b>%{y:,.0f}명</b><extra></extra>"
                 ), secondary_y=False)
 
             # 데이터 없는 구간 표시
@@ -3148,45 +3466,221 @@ elif page == "🤖 AI 생활지원사":
                                bgcolor="rgba(255,255,255,0.8)")
 
             fig2.update_layout(
-                title="AI 생활지원사 참여 인원 추이",
+                title="주차별 인트로 수신 인원 (전화 받은 명수)",
                 height=450, hovermode="x unified",
                 barmode="group", xaxis=dict(type="category"),
                 legend=LEGEND_BELOW, margin=dict(t=40, b=80),
                 bargap=0.3,
             )
-            fig2.update_yaxes(title_text="참여 인원 (명)", secondary_y=False)
+            fig2.update_yaxes(title_text="수신 인원 (명)", secondary_y=False)
             fig2.update_yaxes(title_text="전체 회원수", secondary_y=True)
             st.plotly_chart(fig2, use_container_width=True)
 
         with tab3:
-            ai_monthly_df = data.get("ai_monthly", pd.DataFrame())
-            if not ai_monthly_df.empty and "월" in ai_monthly_df.columns:
-                am = ai_monthly_df.copy()
-                fig_m = go.Figure()
-                color_map = {"인트로참여율": "#7B1FA2", "서비스이용률": "#00897B", "프로그램완료율": "#E91E63"}
-                label_map = {"인트로참여율": "인트로 참여율", "서비스이용률": "서비스 이용률", "프로그램완료율": "프로그램 완료율"}
-                for col, color in color_map.items():
-                    if col in am.columns:
-                        fig_m.add_trace(go.Scatter(
-                            x=am["월"], y=am[col], name=label_map[col],
-                            mode="lines+markers+text",
-                            line=dict(color=color, width=2.5),
-                            text=am[col].apply(lambda v: f"{v:.1f}%" if v > 0 else ""),
-                            textposition="top center",
-                            textfont=dict(size=9),
-                            hovertemplate=f"<b>%{{x}}</b><br>{label_map[col]}: %{{y:.1f}}%<extra></extra>"
-                        ))
-                fig_m.update_layout(
-                    title="AI 생활지원사 월별 참여율 추이",
-                    height=420, hovermode="x unified",
-                    xaxis=dict(type="category", title=""),
-                    yaxis=dict(title="참여율 (%)", range=[0, 100]),
-                    legend=LEGEND_BELOW, margin=dict(t=40, b=80),
-                )
-                st.plotly_chart(fig_m, use_container_width=True)
-                st.dataframe(am, use_container_width=True, height=300)
+            st.markdown(
+                "<div style='font-size:0.85rem;color:#555;padding:0.4rem 0 0.8rem'>"
+                "📊 막대: <b>인트로 참여율</b> · <b>서비스 제안율</b> — 주차별 &nbsp;|&nbsp; "
+                "➖ 선: <b>프로그램 완료율</b> — 주차별 누적"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+            import re as _re
+
+            _MUN_COLORS_M = {
+                "삼척시청": "#1565C0",
+                "양양군청": "#2E7D32",
+                "정선군청": "#E65100",
+                "고성군청": "#00838F",
+            }
+            _SVC_COLORS_M = {
+                "#1565C0": "#42A5F5",
+                "#2E7D32": "#43A047",
+                "#E65100": "#F4511E",
+                "#00838F": "#26C6DA",
+            }
+            _MUN_ORDER_M = ["삼척시청", "양양군청", "정선군청", "고성군청"]
+
+            # 데이터 소스
+            ai_mun_weekly  = data.get("ai_municipality", pd.DataFrame())
+            ai_mun_monthly = data.get("ai_mun_monthly", {})
+
+            def _get_month_num(period_str: str) -> int:
+                """'11주차 (3월 8일~14일)' → 3"""
+                m = _re.search(r'(\d+)월', str(period_str))
+                return int(m.group(1)) if m else 0
+
+            def _get_last_month_num(period_str: str) -> int:
+                """'18주차 (4월 26일~5월 2일)' → 5 (마지막 월 기준 — 토요일 진행 지자체용)"""
+                months = _re.findall(r'(\d+)월', str(period_str))
+                return int(months[-1]) if months else 0
+
+            def _short_period(period_str: str) -> str:
+                """'11주차 (3월 8일~14일)' → '11주차'"""
+                m = _re.search(r'(\d+주차)', str(period_str))
+                return m.group(1) if m else str(period_str)
+
+            if ai_mun_weekly.empty:
+                st.info("주차별 데이터가 없습니다.")
             else:
-                st.info("월별 추이 데이터가 없습니다.")
+                _weekly_muns = ai_mun_weekly[ai_mun_weekly["지자체"].isin(_MUN_ORDER_M)].copy()
+                _muns_m = [m for m in _MUN_ORDER_M if m in _weekly_muns["지자체"].values]
+
+                if not _muns_m:
+                    st.info("삼척/양양/정선 데이터가 없습니다.")
+                else:
+                    # 삼척시청 기준으로 주차별 정규 레이블 생성 (전체 공통 X축 기준)
+                    _REF_MUN = "삼척시청"
+                    _ref_wk = _weekly_muns[_weekly_muns["지자체"] == _REF_MUN].copy()
+                    _ref_wk["_m"] = _ref_wk["기간"].apply(_get_month_num)
+                    _ref_wk["_wim"] = _ref_wk.groupby("_m").cumcount() + 1
+                    _ref_wk["_xlbl"] = _ref_wk.apply(
+                        lambda r: f"{int(r['_m'])}월 {int(r['_wim'])}주 ({_short_period(r['기간'])})", axis=1
+                    )
+                    # 주차번호 → 정규 레이블 매핑 (삼척시청이 커버하는 전체 기간)
+                    def _xlbl_wk_num(lbl):
+                        m = _re.search(r'\((\d+)주차\)', lbl)
+                        return int(m.group(1)) if m else 9999
+                    _wk_to_lbl = {}
+                    for _, _r in _ref_wk.iterrows():
+                        _wkn = int(_re.search(r'(\d+)', _short_period(_r["기간"])).group(1))
+                        _wk_to_lbl[_wkn] = _r["_xlbl"]
+                    _all_x_labels = [_wk_to_lbl[k] for k in sorted(_wk_to_lbl)]
+
+                    for mun in _muns_m:
+                        color_base = _MUN_COLORS_M.get(mun, "#607D8B")
+                        svc_color  = _SVC_COLORS_M.get(color_base, "#90A4AE")
+
+                        mun_wk = _weekly_muns[_weekly_muns["지자체"] == mun].copy()
+                        if mun_wk.empty:
+                            continue
+
+                        mun_wk["_month"] = mun_wk["기간"].apply(_get_month_num)
+                        mun_wk["_wim"]   = mun_wk.groupby("_month").cumcount() + 1
+                        # 정규 레이블: 삼척시청 기준 매핑 → 모든 지자체가 동일 월/주 위치 공유
+                        def _canonical_lbl(p):
+                            _m = _re.search(r'(\d+)', _short_period(p))
+                            _wkn = int(_m.group(1)) if _m else 9999
+                            return _wk_to_lbl.get(_wkn)
+                        mun_wk["_xlbl"] = mun_wk["기간"].apply(_canonical_lbl)
+                        # 정규 레이블 없는 주차(삼척시청 범위 밖)는 직접 생성
+                        _mask = mun_wk["_xlbl"].isna()
+                        mun_wk.loc[_mask, "_xlbl"] = mun_wk[_mask].apply(
+                            lambda r: f"{int(r['_month'])}월 {int(r['_wim'])}주 ({_short_period(r['기간'])})", axis=1
+                        )
+                        x_labels = mun_wk["_xlbl"].tolist()
+                        periods  = mun_wk["기간"].tolist()
+
+                        alarm_users = mun_wk["receiveAlarmUserCount"].apply(safe_numeric).fillna(0)
+                        intro_vals  = mun_wk["intro(%)"].apply(safe_numeric).fillna(0)
+                        svc_vals    = mun_wk["service proposal(%)"].apply(safe_numeric).fillna(0)
+                        intro_cnts  = mun_wk["intro"].apply(safe_numeric).fillna(0).round().astype(int)
+                        svc_cnts    = mun_wk["service proposal"].apply(safe_numeric).fillna(0).round().astype(int) if "service proposal" in mun_wk.columns else (svc_vals / 100 * alarm_users).round().astype(int)
+
+                        fig_mm = go.Figure()
+
+                        # ── 주별 막대: 인트로 참여율
+                        fig_mm.add_trace(go.Bar(
+                            x=x_labels, y=intro_vals,
+                            name="인트로 참여율",
+                            marker_color=color_base,
+                            text=[f"{v:.0f}%<br>({c}명)" if v > 0 else ""
+                                  for v, c in zip(intro_vals, intro_cnts)],
+                            textposition="outside", textfont=dict(size=10),
+                            customdata=list(zip(intro_cnts, periods)),
+                            hovertemplate=(
+                                "<b>%{customdata[1]}</b><br>"
+                                "인트로: <b>%{y:.1f}%</b> (%{customdata[0]}명)"
+                                "<extra></extra>"
+                            ),
+                        ))
+
+                        # ── 주별 막대: 서비스 제안율
+                        fig_mm.add_trace(go.Bar(
+                            x=x_labels, y=svc_vals,
+                            name="서비스 제안율",
+                            marker_color=svc_color,
+                            text=[f"{v:.0f}%<br>({c}명)" if v > 0 else ""
+                                  for v, c in zip(svc_vals, svc_cnts)],
+                            textposition="outside", textfont=dict(size=10),
+                            customdata=list(zip(svc_cnts, periods)),
+                            hovertemplate=(
+                                "<b>%{customdata[1]}</b><br>"
+                                "서비스: <b>%{y:.1f}%</b> (%{customdata[0]}명)"
+                                "<extra></extra>"
+                            ),
+                        ))
+
+                        # ── 월별 누적 프로그램 완료율 (월 내 program complete cumsum / 가입인원)
+                        mun_wk["_prog_cnt"] = mun_wk["program complete"].apply(safe_numeric).fillna(0) if "program complete" in mun_wk.columns else pd.Series(0, index=mun_wk.index)
+                        mun_wk["_prog_cum_cnt"] = mun_wk.groupby("_month")["_prog_cnt"].cumsum()
+                        # 분모: 월 내 마지막 가입인원 (초반 소수 인원일 때 왜곡 방지)
+                        _last_gaip = mun_wk.groupby("_month")["가입인원"].transform("last").apply(safe_numeric).replace(0, float("nan")).fillna(1)
+                        mun_wk["_prog_cum"] = (mun_wk["_prog_cum_cnt"] / _last_gaip * 100).clip(upper=100)
+                        prog_cum = mun_wk["_prog_cum"]
+                        if prog_cum.max() > 0:
+                            prog_cnts = (prog_cum / 100 * _last_gaip).round().astype(int)
+                            fig_mm.add_trace(go.Bar(
+                                x=x_labels, y=prog_cum,
+                                name="프로그램 완료율 (누적)",
+                                legendgroup="prog",
+                                marker_color="rgba(233,30,99,0.75)",
+                                marker_line=dict(color="#E91E63", width=1.5),
+                                text=[f"{v:.0f}%<br>({c}명)" if v > 0 else ""
+                                      for v, c in zip(prog_cum, prog_cnts)],
+                                textposition="outside", textfont=dict(size=10, color="#880E4F"),
+                                customdata=list(zip(prog_cnts, periods)),
+                                hovertemplate=(
+                                    "<b>%{customdata[1]}</b><br>"
+                                    "누적 완료율: <b>%{y:.1f}%</b> (%{customdata[0]}명)"
+                                    "<extra></extra>"
+                                ),
+                            ))
+
+                        # ── 월 구분선 + 월 레이블 annotation
+                        # ── 월 구분 점선 + 월 레이블 (_all_x_labels 인덱스 기준)
+                        _month_list = mun_wk["_month"].tolist()
+                        _prev_m = None
+                        for _xi, _xm in enumerate(_month_list):
+                            if _prev_m is not None and _xm != _prev_m:
+                                _bi = _all_x_labels.index(x_labels[_xi]) if x_labels[_xi] in _all_x_labels else _xi
+                                fig_mm.add_vline(
+                                    x=_bi - 0.5,
+                                    line=dict(color="#78909C", width=1.5, dash="dot"),
+                                )
+                            _prev_m = _xm
+
+                        _month_groups_m = {}
+                        for _xl, _xm in zip(x_labels, _month_list):
+                            _month_groups_m.setdefault(int(_xm), []).append(_xl)
+                        for _xm, _lbls in sorted(_month_groups_m.items()):
+                            _mid = _lbls[len(_lbls) // 2]
+                            fig_mm.add_annotation(
+                                x=_mid, y=138,
+                                text=f"<b>{_xm}월</b>",
+                                showarrow=False,
+                                font=dict(size=12, color="#37474F"),
+                                bgcolor="rgba(236,239,241,0.92)",
+                                bordercolor="#90A4AE",
+                                borderpad=4, borderwidth=1,
+                            )
+
+                        fig_mm.update_layout(
+                            title=dict(text=mun, font=dict(size=16, color=color_base)),
+                            height=480, barmode="group", bargap=0.2,
+                            hovermode="x unified",
+                            xaxis=dict(
+                                type="category",
+                                categoryorder="array",
+                                categoryarray=_all_x_labels,
+                                title="",
+                            ),
+                            yaxis=dict(title="참여율 (%)", range=[0, 148]),
+                            legend=dict(orientation="h", yanchor="top", y=-0.20,
+                                        xanchor="center", x=0.5),
+                            margin=dict(t=55, b=90, r=20),
+                        )
+                        st.plotly_chart(fig_mm, use_container_width=True)
 
         with tab4:
             st.dataframe(ai_df, use_container_width=True, height=400)
@@ -3197,6 +3691,7 @@ elif page == "🤖 AI 생활지원사":
                 "삼척시청": "#1565C0",   # 파랑
                 "양양군청": "#2E7D32",   # 초록
                 "정선군청": "#E65100",   # 주황
+                "고성군청": "#00838F",   # 청록
             }
 
             ai_mun = data.get("ai_municipality", pd.DataFrame())
@@ -3239,7 +3734,11 @@ elif page == "🤖 AI 생활지원사":
                         intro_pct  = safe_numeric(row.get("intro(%)", 0))
                         svc_pct    = safe_numeric(row.get("service proposal(%)", 0))
                         prog_pct   = safe_numeric(row.get("program(%)", 0))
-                        alarm_user = int(safe_numeric(row.get("receiveAlarmUserCount", 0)))
+                        alarm_user  = int(safe_numeric(row.get("receiveAlarmUserCount", 0)))
+                        joined_user = int(safe_numeric(row.get("가입인원", 0)))
+                        intro_cnt  = int(safe_numeric(row.get("intro", 0))) if safe_numeric(row.get("intro", 0)) > 0 else int(round(intro_pct / 100 * alarm_user)) if alarm_user > 0 else 0
+                        svc_cnt    = int(round(svc_pct / 100 * alarm_user)) if alarm_user > 0 else 0
+                        prog_cnt   = int(round(prog_pct / 100 * alarm_user)) if alarm_user > 0 else 0
                         raw_period = mun_start_map.get(mun, "-")
                         start_date = raw_period.split("~")[0].strip() if "~" in raw_period else raw_period
                         with cols_kpi[i]:
@@ -3253,12 +3752,12 @@ elif page == "🤖 AI 생활지원사":
                                   </div>
                                   <hr style="border:none;border-top:1px solid rgba(255,255,255,0.35);margin:0 0 0.6rem">
                                   <div style="font-size:0.78rem;opacity:0.85;margin-bottom:0.2rem">
-                                    📨 알람도달 {alarm_user}명
+                                    👥 가입인원 {joined_user}명 &nbsp;|&nbsp; 📨 알람도달 {alarm_user}명
                                   </div>
                                   <div style="font-size:1.9rem;font-weight:900;line-height:1.1">{intro_pct:.0f}%</div>
-                                  <div style="font-size:0.72rem;opacity:0.85;margin-bottom:0.5rem">📊 인트로 참여율</div>
+                                  <div style="font-size:0.72rem;opacity:0.9;margin-bottom:0.5rem">📊 인트로 참여율 <b>({intro_cnt}명)</b></div>
                                   <div style="font-size:0.82rem">
-                                    🛎️ 서비스 {svc_pct:.0f}% &nbsp;|&nbsp; ✅ 프로그램 {prog_pct:.0f}%
+                                    🛎️ 서비스 {svc_pct:.0f}% ({svc_cnt}명) &nbsp;|&nbsp; ✅ 프로그램 {prog_pct:.0f}% ({prog_cnt}명)
                                   </div>
                                 </div>""",
                                 unsafe_allow_html=True,
@@ -3266,86 +3765,75 @@ elif page == "🤖 AI 생활지원사":
 
                 st.markdown("---")
 
-                # ── 주차별 참여율 추이: 지자체×지표 명도별 그룹 막대 (단일 차트) ──
-                # 지자체별 3단계 명도: 인트로(진) / 서비스(중) / 프로그램(연)
-                MUN_SHADES = {
-                    "삼척시청": {
-                        "intro(%)":            "#1565C0",   # 진파랑
-                        "service proposal(%)": "#42A5F5",   # 중파랑
-                        "program(%)":          "#90CAF9",   # 연파랑
-                    },
-                    "양양군청": {
-                        "intro(%)":            "#1B5E20",   # 진초록
-                        "service proposal(%)": "#43A047",   # 중초록
-                        "program(%)":          "#A5D6A7",   # 연초록
-                    },
-                    "정선군청": {
-                        "intro(%)":            "#BF360C",   # 진주황
-                        "service proposal(%)": "#F4511E",   # 중주황
-                        "program(%)":          "#FFAB91",   # 연주황
-                    },
+                # ── 지자체별 월별 지표 차트 (ai_mun_monthly: 삼척/양양/정선 전용 시트) ──
+                _MM_COLORS = {
+                    "인트로참여율":  "#7B1FA2",
+                    "서비스제안율":  "#00897B",
+                    "프로그램완료율": "#E91E63",
                 }
-                DEFAULT_SHADES = {
-                    "intro(%)": "#607D8B",
-                    "service proposal(%)": "#90A4AE",
-                    "program(%)": "#CFD8DC",
+                _MM_LABELS = {
+                    "인트로참여율":  "인트로 참여율",
+                    "서비스제안율":  "서비스 제안율",
+                    "프로그램완료율": "프로그램 완료율",
                 }
-                METRIC_DEF = [
-                    ("intro(%)",            "인트로 참여율"),
-                    ("service proposal(%)", "서비스 제안율"),
-                    ("program(%)",          "프로그램 완료율"),
-                ]
+                ai_mun_monthly = data.get("ai_mun_monthly", {})
 
-                # ── 지자체별 개별 그래프 (x축 기간 공통 고정) ──────────────
-                # 전체 기간 목록을 원래 순서대로 확정 → 모든 차트가 같은 x 눈금 사용
-                all_periods = list(dict.fromkeys(mun_only["기간"].tolist()))  # 순서 보존 중복 제거
+                # 표시 순서: 삼척 → 양양 → 정선
+                _MUN_ORDER = ["삼척시청", "양양군청", "정선군청"]
+                _muns_to_show = [m for m in _MUN_ORDER if m in ai_mun_monthly] + \
+                                [m for m in ai_mun_monthly if m not in _MUN_ORDER]
 
-                for mun in muns:
-                    sub = mun_only[mun_only["지자체"] == mun].copy()
-                    if sub.empty:
-                        continue
-                    # 전체 기간 기준으로 reindex (없는 주차는 0)
-                    sub = sub.set_index("기간").reindex(all_periods).reset_index()
-                    sub["기간"] = pd.Categorical(sub["기간"], categories=all_periods, ordered=True)
+                if _muns_to_show:
+                    for mun in _muns_to_show:
+                        am = ai_mun_monthly[mun]
+                        color_base = MUN_COLORS.get(mun, "#607D8B")
+                        alarm_day = mun_only[mun_only["지자체"] == mun]["알람요일"].iloc[0] \
+                                    if mun in mun_only["지자체"].values and "알람요일" in mun_only.columns else ""
+                        mun_label = f"{mun} ({alarm_day})" if alarm_day else mun
 
-                    alarm_day = mun_only[mun_only["지자체"] == mun]["알람요일"].iloc[0] \
-                                if "알람요일" in mun_only.columns else ""
-                    mun_label = f"{mun} ({alarm_day})" if alarm_day else mun
-                    color_base = MUN_COLORS.get(mun, "#607D8B")
-                    shades = MUN_SHADES.get(mun, DEFAULT_SHADES)
-
-                    fig_m = go.Figure()
-                    for m_col, m_label in METRIC_DEF:
-                        vals = sub[m_col].apply(safe_numeric) if m_col in sub.columns else pd.Series([0]*len(sub))
-                        color = shades.get(m_col, "#607D8B")
-                        fig_m.add_trace(go.Bar(
-                            x=sub["기간"],
-                            y=vals,
-                            name=m_label,
-                            marker_color=color,
-                            text=vals.apply(lambda v: f"{v:.0f}%" if pd.notna(v) and v > 0 else ""),
-                            textposition="outside",
-                            textfont=dict(size=15),
-                            hovertemplate=f"<b>%{{x}}</b><br>{m_label}: <b>%{{y:.1f}}%</b><extra></extra>",
-                        ))
-                    fig_m.update_layout(
-                        title=dict(text=mun_label, font=dict(size=16, color=color_base)),
-                        height=380,
-                        barmode="group",
-                        bargap=0.2,
-                        hovermode="x unified",
-                        xaxis=dict(
-                            type="category",
-                            categoryorder="array",
-                            categoryarray=all_periods,  # 모든 차트 동일 x축
-                            title="",
-                        ),
-                        yaxis=dict(title="참여율 (%)", range=[0, 115]),
-                        legend=dict(orientation="h", yanchor="top", y=-0.18,
-                                    xanchor="center", x=0.5),
-                        margin=dict(t=50, b=80),
-                    )
-                    st.plotly_chart(fig_m, use_container_width=True)
+                        fig_mm = go.Figure()
+                        bar_colors = {
+                            "인트로참여율":  color_base,
+                            "서비스제안율":  "#42A5F5" if color_base == "#1565C0" else
+                                            "#43A047" if color_base == "#2E7D32" else "#F4511E",
+                            "프로그램완료율": "#90CAF9" if color_base == "#1565C0" else
+                                            "#A5D6A7" if color_base == "#2E7D32" else "#FFAB91",
+                        }
+                        for col, label in _MM_LABELS.items():
+                            if col not in am.columns:
+                                continue
+                            vals = am[col].apply(safe_numeric).fillna(0)
+                            # 회원수 기반 인원 계산
+                            if "회원수" in am.columns:
+                                mbr = am["회원수"].apply(safe_numeric).fillna(0)
+                                cnts = (vals / 100 * mbr).round().astype(int)
+                            else:
+                                cnts = pd.Series([0] * len(vals))
+                            fig_mm.add_trace(go.Bar(
+                                x=am["월"], y=vals,
+                                name=label,
+                                marker_color=bar_colors.get(col, "#607D8B"),
+                                text=[f"{v:.0f}%\n({c}명)" if v > 0 else "" for v, c in zip(vals, cnts)],
+                                textposition="outside",
+                                textfont=dict(size=11),
+                                customdata=cnts,
+                                hovertemplate=f"<b>%{{x}}</b><br>{label}: <b>%{{y:.1f}}%</b> (%{{customdata}}명)<extra></extra>",
+                            ))
+                        fig_mm.update_layout(
+                            title=dict(text=mun_label, font=dict(size=16, color=color_base)),
+                            height=400,
+                            barmode="group",
+                            bargap=0.25,
+                            hovermode="x unified",
+                            xaxis=dict(type="category", title=""),
+                            yaxis=dict(title="참여율 (%)", range=[0, 120]),
+                            legend=dict(orientation="h", yanchor="top", y=-0.18,
+                                        xanchor="center", x=0.5),
+                            margin=dict(t=50, b=90),
+                        )
+                        st.plotly_chart(fig_mm, use_container_width=True)
+                else:
+                    st.info("월별 데이터를 불러오는 중입니다. 잠시 후 새로고침해주세요.")
 
                 # ── 상세 데이터 표 ─────────────────────────────────────────
                 with st.expander("상세 데이터 보기"):
@@ -3358,7 +3846,7 @@ elif page == "🤖 AI 생활지원사":
 # ============================================================
 # 📊 콘텐츠·생활·날씨
 # ============================================================
-elif page == "🩺 8.건강상담":
+elif page == "🩺 9.건강상담":
     st.markdown('<div class="section-header">🩺 건강상담</div>', unsafe_allow_html=True)
 
     p_start, p_end = page_week_range_selector("health", weeks)
@@ -3418,6 +3906,45 @@ elif page == "🩺 8.건강상담":
                                   hovermode="x unified", xaxis=dict(type="category"),
                                   legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
                 st.plotly_chart(fig, use_container_width=True)
+
+            # ── 서비스 유형별 이용건수 (tab1 인라인) ──────────────────────
+            if not hc_mun.empty:
+                _hc = hc_mun.copy()
+                _SERVICE_COLS = [c for c in ["전문의료진상담", "병원안내", "일반상담", "진료예약"] if c in _hc.columns]
+                _SERVICE_COLORS = {"전문의료진상담": "#26C6DA", "병원안내": "#5B73E8", "일반상담": "#66BB6A", "진료예약": "#FF6F00"}
+                _hc["주차"] = _hc["날짜"].apply(date_to_week_label)
+                if p_start and p_end and weeks:
+                    _s = weeks.index(p_start) if p_start in weeks else 0
+                    _e = weeks.index(p_end) if p_end in weeks else len(weeks) - 1
+                    _week_order = weeks[_s:_e + 1]
+                    _hc_f = _hc[_hc["주차"].isin(set(_week_order))].copy()
+                else:
+                    _week_order = list(dict.fromkeys(_hc.sort_values("날짜")["주차"].tolist()))
+                    _hc_f = _hc.copy()
+                _hc_week = _hc_f.groupby("주차")[_SERVICE_COLS].sum().reset_index()
+                if _week_order:
+                    _all_w = pd.DataFrame({"주차": _week_order})
+                    _hc_week = _all_w.merge(_hc_week, on="주차", how="left").fillna(0)
+                    _hc_week["주차"] = pd.Categorical(_hc_week["주차"], categories=_week_order, ordered=True)
+                    _hc_week = _hc_week.sort_values("주차")
+                _fig_st = go.Figure()
+                for _sc in _SERVICE_COLS:
+                    _fig_st.add_trace(go.Bar(
+                        x=_hc_week["주차"].astype(str), y=_hc_week[_sc], name=_sc,
+                        marker_color=_SERVICE_COLORS.get(_sc, "#999"),
+                        text=_hc_week[_sc].apply(lambda v: f"{int(v)}" if v > 0 else ""),
+                        textposition="inside", textfont=dict(size=11, color="white"),
+                        hovertemplate=f"<b>%{{x}}</b><br>{_sc}: %{{y:,}}건<extra></extra>",
+                    ))
+                _fig_st.update_layout(
+                    barmode="stack",
+                    title="주차별 건강상담 서비스 유형별 이용건수",
+                    height=400, hovermode="x unified",
+                    xaxis=dict(type="category", tickangle=-45, tickfont=dict(size=11)),
+                    yaxis=dict(title="이용건수"),
+                    legend=LEGEND_BELOW, margin=dict(t=45, b=90),
+                )
+                st.plotly_chart(_fig_st, use_container_width=True, key="hc_service_type_tab1")
 
         # ── 탭 2: 지자체별 서비스 유형별 현황 ────────────────────────────
         with tab2:
@@ -3487,7 +4014,7 @@ elif page == "🩺 8.건강상담":
                     yaxis=dict(title="이용건수"),
                     legend=LEGEND_BELOW, margin=dict(t=45, b=90),
                 )
-                st.plotly_chart(fig_stack, use_container_width=True)
+                st.plotly_chart(fig_stack, use_container_width=True, key="hc_service_type_tab2")
 
                 # ② 실제 데이터가 있는 가장 최근 주차 기준 지자체별 현황
                 if not hc_filtered.empty and week_order:
@@ -3571,7 +4098,7 @@ elif page == "🩺 8.건강상담":
 # ============================================================
 # 💬 생활상담
 # ============================================================
-elif page == "💬 9.생활상담":
+elif page == "💬 10.생활상담":
     st.markdown('<div class="section-header">💬 생활상담</div>', unsafe_allow_html=True)
 
     p_start, p_end = page_week_range_selector("life", weeks)
@@ -3634,6 +4161,208 @@ elif page == "💬 9.생활상담":
             st.dataframe(life_df, use_container_width=True, height=400)
     else:
         st.info("생활상담 데이터가 없습니다.")
+
+
+# ============================================================
+# 🚶 걸음수
+# ============================================================
+elif page == "🚶 걸음수":
+    st.markdown('<div class="section-header">🚶 걸음수</div>', unsafe_allow_html=True)
+
+    _df_steps_raw = sheets.get("걸음수현황", pd.DataFrame())
+
+    # 테스트/내부 계정 제거
+    _STEPS_EXCLUDE = {"WAPLAT", "ai생활지원사테스트", "한전MCS"}
+
+    if _df_steps_raw.empty or "date" not in _df_steps_raw.columns:
+        st.info("걸음수 데이터가 없습니다.")
+    else:
+        _df_steps = _df_steps_raw[~_df_steps_raw["agencyName"].isin(_STEPS_EXCLUDE)].copy()
+        _df_steps["date"] = pd.to_datetime(_df_steps["date"], errors="coerce")
+        _df_steps = _df_steps.dropna(subset=["date"]).sort_values("date")
+        _df_steps["memberCnt"]    = _df_steps["memberCnt"].apply(safe_numeric)
+        _df_steps["dailyStepAvg"] = _df_steps["dailyStepAvg"].apply(safe_numeric)
+        _df_steps["totalSteps"]   = _df_steps["memberCnt"] * _df_steps["dailyStepAvg"]
+
+        # ── 날짜 범위 필터 ────────────────────────────────────────────
+        _min_date = _df_steps["date"].min().date()
+        _max_date = _df_steps["date"].max().date()
+        _col_date_l, _col_date_r = st.columns([2, 3])
+        with _col_date_l:
+            _sel_range = st.date_input(
+                "기간 선택",
+                value=(_min_date, _max_date),
+                min_value=_min_date,
+                max_value=_max_date,
+            )
+        if isinstance(_sel_range, (list, tuple)) and len(_sel_range) == 2:
+            _df_filt = _df_steps[
+                (_df_steps["date"].dt.date >= _sel_range[0]) &
+                (_df_steps["date"].dt.date <= _sel_range[1])
+            ]
+        else:
+            _df_filt = _df_steps
+        # 6월 1일 데이터 제외
+        _df_filt = _df_filt[~((_df_filt["date"].dt.month == 6) & (_df_filt["date"].dt.day == 1))]
+
+        # ── KPI 카드 (최신 주차 vs 전주차) ──────────────────────────
+        _daily_agg = _df_filt.groupby("date").agg(
+            _users=("memberCnt", "sum"),
+            _steps=("totalSteps", "sum"),
+        ).reset_index()
+        _daily_agg["_avg_per_person"] = (
+            _daily_agg["_steps"] / _daily_agg["_users"].replace(0, float("nan"))
+        )
+
+        _max_dt   = _daily_agg["date"].max()
+        _curr_start = _max_dt - pd.Timedelta(days=6)
+        _prev_end   = _curr_start - pd.Timedelta(days=1)
+        _prev_start = _prev_end - pd.Timedelta(days=6)
+
+        _curr_d = _daily_agg[_daily_agg["date"] >= _curr_start]
+        _prev_d = _daily_agg[(_daily_agg["date"] >= _prev_start) & (_daily_agg["date"] <= _prev_end)]
+
+        _kpi_users = int(round(_curr_d["_users"].mean())) if not _curr_d.empty else 0
+        _kpi_avg   = _curr_d["_avg_per_person"].mean() if not _curr_d.empty else 0
+
+        _prev_users = int(round(_prev_d["_users"].mean())) if not _prev_d.empty else None
+        _prev_avg   = _prev_d["_avg_per_person"].mean() if not _prev_d.empty else None
+
+        def _delta_html(curr, prev, unit, fmt=".0f"):
+            if prev is None or prev == 0:
+                return ""
+            diff = curr - prev
+            sign = "▲" if diff >= 0 else "▼"
+            color = "#4CAF50" if diff >= 0 else "#F44336"
+            return f'<span style="font-size:13px;color:{color};margin-left:8px">{sign} {abs(diff):{fmt}}{unit} vs 전주</span>'
+
+        _curr_lbl = f"{_curr_start.strftime('%m/%d')}~{_max_dt.strftime('%m/%d')}"
+        _prev_lbl = f"{_prev_start.strftime('%m/%d')}~{_prev_end.strftime('%m/%d')}" if _prev_d is not None and not _prev_d.empty else "-"
+        _filt_start = _df_filt["date"].min().strftime("%m/%d")
+        _filt_end   = _df_filt["date"].max().strftime("%m/%d")
+        st.caption(f"기간: {_filt_start} ~ {_filt_end} | 최신 주차: {_curr_lbl}  전주차: {_prev_lbl}")
+
+        k1, k2 = st.columns(2)
+        with k1:
+            st.markdown(f"""<div class="metric-card">
+                <div class="label">이용자 수 (일 평균)</div>
+                <div class="value">{_kpi_users:,}<span class="unit">명</span>{_delta_html(_kpi_users, _prev_users, "명", ",.0f")}</div>
+            </div>""", unsafe_allow_html=True)
+        with k2:
+            st.markdown(f"""<div class="metric-card-orange">
+                <div class="label">1인 평균</div>
+                <div class="value">{_kpi_avg:,.0f}<span class="unit">보</span>{_delta_html(_kpi_avg, _prev_avg, "보", ",.0f")}</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ── 지자체 색상 매핑 ─────────────────────────────────────────
+        _all_agencies = sorted(_df_filt["agencyName"].unique().tolist())
+        _steps_color_map = {m: MUNICIPALITY_COLORS.get(m, "#90CAF9") for m in _all_agencies}
+
+        # ── 일자별 합산 차트 (탭 위) ─────────────────────────────────
+        _daily_sum_users = _df_filt.groupby("date")["memberCnt"].sum().reset_index()
+        _daily_sum_users["date_str"] = _daily_sum_users["date"].dt.strftime("%m/%d")
+        _daily_sum_steps = _df_filt.groupby("date")["totalSteps"].sum().reset_index()
+        _daily_sum_steps["date_str"] = _daily_sum_steps["date"].dt.strftime("%m/%d")
+        _daily_avg_steps = _daily_sum_steps.copy()
+        _daily_avg_steps["avgStep"] = (_daily_sum_steps["totalSteps"] / _daily_sum_users["memberCnt"].replace(0, float("nan"))).fillna(0)
+
+        _sc1, _sc2 = st.columns(2)
+        with _sc1:
+            _fig_sum_u = go.Figure(go.Bar(
+                x=_daily_sum_users["date_str"],
+                y=_daily_sum_users["memberCnt"],
+                marker_color="#42A5F5",
+                text=_daily_sum_users["memberCnt"],
+                textposition="outside",
+                texttemplate="%{y}명",
+                hovertemplate="날짜: <b>%{x}</b><br>이용자: <b>%{y:,}명</b><extra></extra>",
+            ))
+            _fig_sum_u.update_layout(
+                title="일자별 이용자 수 (합산)",
+                xaxis=dict(title="", tickangle=-45),
+                yaxis=dict(title="이용자 수 (명)"),
+                height=380,
+                margin=dict(t=50, b=80, r=20),
+            )
+            st.plotly_chart(_fig_sum_u, use_container_width=True)
+        with _sc2:
+            _fig_avg_s = go.Figure(go.Bar(
+                x=_daily_avg_steps["date_str"],
+                y=_daily_avg_steps["avgStep"],
+                marker_color="#FFA726",
+                text=_daily_avg_steps["avgStep"],
+                textposition="outside",
+                texttemplate="%{y:,.0f}",
+                hovertemplate="날짜: <b>%{x}</b><br>1인 평균: <b>%{y:,.0f}보</b><extra></extra>",
+            ))
+            _fig_avg_s.update_layout(
+                title="일자별 1인 평균 걸음수",
+                xaxis=dict(title="", tickangle=-45),
+                yaxis=dict(title="걸음수 (보)"),
+                height=380,
+                margin=dict(t=50, b=80, r=20),
+            )
+            st.plotly_chart(_fig_avg_s, use_container_width=True)
+
+        st.markdown("---")
+
+        tab1, tab2 = st.tabs(["👥 일자별 이용자 수 (지자체별)", "🦶 일자별 평균 걸음수 (지자체별)"])
+
+        # ── Tab1: 일자별 지자체별 이용자 수 ─────────────────────────
+        with tab1:
+            # 지자체별 라인 차트
+            fig_line_cnt = px.line(
+                _df_filt, x="date", y="memberCnt", color="agencyName",
+                color_discrete_map=_steps_color_map,
+                markers=True,
+                title="일자별 지자체별 이용자 추이 (line)",
+            )
+            fig_line_cnt.update_layout(
+                xaxis=dict(title="날짜"),
+                yaxis=dict(title="이용자 수 (명)"),
+                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, font=dict(size=10)),
+                margin=dict(t=50, b=160, r=20),
+                height=480,
+            )
+            st.plotly_chart(fig_line_cnt, use_container_width=True)
+
+        # ── Tab2: 일자별 지자체별 평균 걸음수 ───────────────────────
+        with tab2:
+            fig_line_avg = px.line(
+                _df_filt, x="date", y="dailyStepAvg", color="agencyName",
+                color_discrete_map=_steps_color_map,
+                markers=True,
+                title="일자별 지자체별 1인 평균 걸음수 (dailyStepAvg)",
+            )
+            fig_line_avg.update_layout(
+                xaxis=dict(title="날짜"),
+                yaxis=dict(title="평균 걸음수 (보)"),
+                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, font=dict(size=10)),
+                margin=dict(t=50, b=160, r=20),
+                height=480,
+            )
+            fig_line_avg.update_traces(hovertemplate="<b>%{fullData.name}</b><br>날짜: %{x|%m/%d}<br>평균: <b>%{y:,.0f}보</b><extra></extra>")
+            st.plotly_chart(fig_line_avg, use_container_width=True)
+
+            # 총 걸음수 라인 (memberCnt × dailyStepAvg)
+            fig_line_total = px.line(
+                _df_filt, x="date", y="totalSteps", color="agencyName",
+                color_discrete_map=_steps_color_map,
+                markers=True,
+                title="일자별 지자체별 총 걸음수 (memberCnt × dailyStepAvg)",
+            )
+            fig_line_total.update_layout(
+                xaxis=dict(title="날짜"),
+                yaxis=dict(title="총 걸음수 (보)"),
+                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5, font=dict(size=10)),
+                margin=dict(t=50, b=160, r=20),
+                height=480,
+            )
+            fig_line_total.update_traces(hovertemplate="<b>%{fullData.name}</b><br>날짜: %{x|%m/%d}<br>총 걸음수: <b>%{y:,.0f}보</b><extra></extra>")
+            st.plotly_chart(fig_line_total, use_container_width=True)
+
 
 
 # ============================================================

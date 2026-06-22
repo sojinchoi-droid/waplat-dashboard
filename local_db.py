@@ -619,19 +619,39 @@ def get_all_agencies(include_inactive=False) -> pd.DataFrame:
     return df
 
 
+# 베이직 지자체 목록 (고정 관리)
+BASIC_AGENCIES = [
+    "경기도청", "서초구청", "진천군청", "포천시청",
+    "경남사회서비스원", "홍천군청", "정선군청",
+]
+TOTAL_ACTIVE = 24   # 전체 계약 지자체 수 (세이프 + 베이직)
+
 def get_agency_summary(sheets=None) -> dict:
     """지자체 현황 요약
-    - 활성 지자체 = 이용자현황 시트(gid=33599894)의 지자체 수
-    - 세이프 = safe_agency_status 테이블의 지자체 수
-    - 베이직 = 활성 - 세이프
+    - 베이직 = BASIC_AGENCIES (7개 고정)
+    - 세이프 = safe_agency_status 테이블 행 수 (업로드 파일 기준)
+    - 활성 지자체 = 세이프 + 베이직
     """
     import pandas as pd
     summary = {}
 
-    # 1. 활성 지자체 수: 이용자현황 시트에서 가져오기
-    active_count = 0
     total_target = 0
     total_completed = 0
+
+    basic_count = len(BASIC_AGENCIES)   # 7 (고정)
+
+    # 세이프: safe_agency_status 테이블에서 실제 행 수 가져오기
+    try:
+        conn = get_connection()
+        row = conn.execute("SELECT COUNT(*) FROM safe_agency_status").fetchone()
+        conn.close()
+        safe_count = int(row[0]) if row and row[0] else TOTAL_ACTIVE - basic_count
+    except Exception:
+        safe_count = TOTAL_ACTIVE - basic_count  # fallback: 15
+
+    active_count = safe_count + basic_count  # 세이프 + 베이직 = 활성 지자체
+
+    # 가입 통계는 이용자현황 시트에서 계속 읽어옴
     try:
         if sheets and "이용자현황" in sheets and not sheets["이용자현황"].empty:
             reg = sheets["이용자현황"]
@@ -639,31 +659,14 @@ def get_agency_summary(sheets=None) -> dict:
             from sheets_data import fetch_sheet, SHEET_GIDS, get_registration_status
             reg_sheets = {"이용자현황": fetch_sheet(SHEET_GIDS["이용자현황"])}
             reg = get_registration_status(reg_sheets)
-
         if not reg.empty:
             from sheets_data import safe_numeric
-            first_col = reg.columns[0]
-            agencies = [str(v).strip() for v in reg[first_col] if pd.notna(v) and str(v).strip()]
-            active_count = len(agencies)
-
             if "협약인원" in reg.columns:
                 total_target = int(reg["협약인원"].apply(safe_numeric).sum())
             if "가입완료" in reg.columns:
                 total_completed = int(reg["가입완료"].apply(safe_numeric).sum())
-    except:
+    except Exception:
         pass
-
-    # 2. 세이프: safe_agency_status 테이블
-    conn = get_connection()
-    c = conn.cursor()
-
-    safe_row = c.execute("SELECT COUNT(*) FROM safe_agency_status").fetchone()
-    safe_count = safe_row[0] if safe_row else 0
-
-    conn.close()
-
-    # 3. 베이직 = 활성 - 세이프
-    basic_count = max(0, active_count - safe_count)
 
     summary["total"] = active_count
     summary["active"] = active_count
@@ -719,9 +722,53 @@ def seed_manual_agencies():
     conn.close()
 
 
+def seed_safe_agency_status():
+    """세이프 현황 데이터 시드 — Streamlit Cloud 재시작 후에도 데이터 유지"""
+    entries = [
+        # (monitoring_start_date, memo, agency_name, contract_users, registered_users, joined_users)
+        ("2026.01.02",                  "(정식)세이프",                    "강릉시청",             50,  29,  25),
+        ("2026.01.02",                  "(정식)세이프",                    "강원사회서비스원",        24,  20,  10),
+        ("2026.01.27",                  "(정식)세이프",                    "희망나래장애인복지관",     8,   8,   8),
+        ("2026.02.23",                  "(시범)베이직 -> (정식)세이프",     "음성군청",             130,  65,  51),
+        ("2026.03.03",                  "(정식)세이프 플러스",              "삼척시청",              50,  50,  49),
+        ("2026.03.03",                  "(정식)세이프",                    "충남사회서비스원",        70,  51,  12),
+        ("2026.03.05",                  "(시범)베이직 -> (정식)세이프",     "금정구청",             200, 198, 195),
+        ("2026.03.11(추가) 2026.03.18", "(시범)베이직 -> (정식)세이프",     "충북사회서비스원",       100, 100,  94),
+        ("2026.03.12",                  "(시범)베이직 -> (정식)세이프",     "증평군청",             100,  34,  31),
+        ("2026.04.01",                  "(정식)세이프",                    "광명시청",              50,  50,  37),
+        ("2026.04.01",                  "(정식)세이프",                    "제주도청(제주시)",        52,  51,  51),
+        ("2026.04.01",                  "(정식)세이프",                    "제주도청(서귀포시)",      34,  33,  33),
+        ("2026.04.02",                  "(정식)세이프 플러스",              "양양군청",              50,   4,   4),
+        ("2026.04.06",                  "(정식)세이프",                    "양평군청",             400, 400, 262),
+        ("2026.04.20",                  "(정식)세이프 플러스 & 세이프",     "고성군청",              40,  23,   8),
+        ("2026.05.04",                  "(정식)세이프",                    "용인시청",              50,  13,   7),
+        ("2026.05.04",                  "(정식)세이프",                    "광주동구청",            100,  93,  79),
+    ]
+    conn = get_connection()
+    for start, memo, name, c_users, r_users, j_users in entries:
+        r_rate = round(r_users / c_users * 100, 1) if c_users > 0 else 0
+        j_rate = round(j_users / c_users * 100, 1) if c_users > 0 else 0
+        conn.execute("""
+            INSERT INTO safe_agency_status
+                (monitoring_start_date, memo, agency_name, contract_users, registered_users, joined_users, registered_rate, joined_rate)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(agency_name) DO UPDATE SET
+                monitoring_start_date = excluded.monitoring_start_date,
+                memo                  = excluded.memo,
+                contract_users        = excluded.contract_users,
+                registered_users      = excluded.registered_users,
+                joined_users          = excluded.joined_users,
+                registered_rate       = excluded.registered_rate,
+                joined_rate           = excluded.joined_rate
+        """, (start, memo, name, c_users, r_users, j_users, r_rate, j_rate))
+    conn.commit()
+    conn.close()
+
+
 # 앱 시작 시 자동 초기화
 init_db()
 seed_manual_agencies()
+seed_safe_agency_status()
 
 
 if __name__ == "__main__":
