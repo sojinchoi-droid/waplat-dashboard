@@ -1232,11 +1232,15 @@ if page == "📋 Summary":
                     if not recently_started.empty:
                         for _, r in recently_started.iterrows():
                             model = MODEL_KR.get(r.get("service_model", ""), r.get("service_model", ""))
-                            st.markdown(f'<div class="insight-box-success">{r["contract_start"]} {r["agency_name"]} {model} 계약 시작 ({int(r.get("target_users", 0))}명)</div>', unsafe_allow_html=True)
+                            users = int(r.get("target_users", 0))
+                            users_str = f" ({users}명)" if users > 0 else " (규모 미정)"
+                            st.markdown(f'<div class="insight-box-success">{r["contract_start"]} {r["agency_name"]} {model} 계약 시작{users_str}</div>', unsafe_allow_html=True)
                     if not starting_soon.empty:
                         for _, r in starting_soon.iterrows():
                             model = MODEL_KR.get(r.get("service_model", ""), r.get("service_model", ""))
-                            st.markdown(f'<div class="insight-box">{r["contract_start"]} {r["agency_name"]} {model} 계약 시작 예정 ({int(r.get("target_users", 0))}명)</div>', unsafe_allow_html=True)
+                            users = int(r.get("target_users", 0))
+                            users_str = f" ({users}명)" if users > 0 else " (규모 미정)"
+                            st.markdown(f'<div class="insight-box">{r["contract_start"]} {r["agency_name"]} {model} 계약 시작 예정{users_str}</div>', unsafe_allow_html=True)
                     if recently_started.empty and starting_soon.empty:
                         st.markdown('<div class="insight-box">최근 4주 내 계약 시작 없음</div>', unsafe_allow_html=True)
 
