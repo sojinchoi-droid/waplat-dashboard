@@ -1917,28 +1917,32 @@ elif page == "🖐 2.안부확인":
                     daily["complete_user_count"]
                     / daily["target_user_count"].replace(0, float("nan")) * 100
                 ).round(1).fillna(0)
+                # 최근 90일만 표시 (최신 날짜가 오른쪽에 꽉 차도록)
+                _cr_daily = daily.sort_values("date").tail(90).reset_index(drop=True)
                 fig_cr = go.Figure()
                 fig_cr.add_trace(go.Scatter(
-                    x=daily["date"], y=daily["안부확인율"],
+                    x=_cr_daily["date"], y=_cr_daily["안부확인율"],
                     mode="lines+markers", name="안부확인율",
                     line=dict(color="#2F5496", width=2.5),
                     fill="tozeroy", fillcolor="rgba(47,84,150,0.08)",
                     hovertemplate="<b>%{x}</b><br>안부확인율: %{y:.1f}%<extra></extra>"
                 ))
-                # x축 틱 수 제한 (최대 24개)
-                _cr_dates = daily["date"].tolist()
-                _step = max(1, len(_cr_dates) // 24)
+                # x축 틱 수 제한 (최대 18개)
+                _cr_dates = _cr_daily["date"].tolist()
+                _step = max(1, len(_cr_dates) // 18)
                 _tick_vals = _cr_dates[::_step]
+                _n_cr = len(_cr_dates)
                 fig_cr.update_layout(
-                    title="일별 안부확인율 (완료자 / 대상자)",
+                    title=f"일별 안부확인율 (완료자 / 대상자) — 최근 {_n_cr}일",
                     height=350, hovermode="x unified",
                     xaxis=dict(
                         type="category", title="",
                         tickmode="array", tickvals=_tick_vals,
                         tickangle=-45, tickfont=dict(size=11),
+                        range=[-0.5, _n_cr - 0.5],
                     ),
                     yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
-                    margin=dict(t=40, b=80),
+                    margin=dict(t=40, b=80, r=60),
                 )
                 st.plotly_chart(fig_cr, use_container_width=True)
 
@@ -2450,12 +2454,12 @@ elif page == "📊 3.안부체크율":
     cd_all = data.get("checkin_daily", pd.DataFrame())
     if not cd_all.empty and "안부체크율" in cd_all.columns and "날짜" in cd_all.columns:
         cd_plot = cd_all[cd_all["안부체크율"].apply(safe_numeric) > 0].copy()
-        # 최근 26주(182일)만 표시
-        cd_plot = cd_plot.sort_values("날짜").tail(182)
+        # 최근 90일만 표시 (최신 날짜가 오른쪽에 꽉 차도록)
+        cd_plot = cd_plot.sort_values("날짜").tail(90).reset_index(drop=True)
         if not cd_plot.empty:
-            # x축 틱 수 제한: 최대 24개만 표시
+            # x축 틱 수 제한: 최대 18개만 표시
             n_pts = len(cd_plot)
-            tick_step = max(1, n_pts // 24)
+            tick_step = max(1, n_pts // 18)
             tick_vals = cd_plot["날짜"].tolist()[::tick_step]
 
             fig_ab = go.Figure()
@@ -2468,15 +2472,16 @@ elif page == "📊 3.안부체크율":
                 hovertemplate="<b>%{x}</b><br>안부체크율: %{y:.1f}%<extra>OFF 제외</extra>",
             ))
             fig_ab.update_layout(
-                title="안부체크율 전체 추이 (OFF 제외, AB열 기준)",
+                title=f"안부체크율 전체 추이 (OFF 제외, AB열 기준) — 최근 {n_pts}일",
                 height=360, hovermode="x unified",
                 xaxis=dict(
                     type="category", title="",
                     tickmode="array", tickvals=tick_vals,
                     tickangle=-45, tickfont=dict(size=11),
+                    range=[-0.5, n_pts - 0.5],
                 ),
                 yaxis=dict(title="안부체크율 (%)", range=[0, 100]),
-                margin=dict(t=45, b=90),
+                margin=dict(t=45, b=90, r=60),
             )
             st.plotly_chart(fig_ab, use_container_width=True)
             st.markdown("---")
