@@ -1060,38 +1060,6 @@ if page == "📋 Summary":
         prev_week = get_prev_week(selected_week)
         prev_summary = cached_week_summary(sheets, data, prev_week) if prev_week else {}
 
-        # 안부체크율: Google Sheets 수식이 2026년 데이터에서 깨져있으므로 DB에서 직접 계산
-        def _db_checkin_rate(week_str):
-            try:
-                _wu2 = data.get("weekly_users", pd.DataFrame())
-                _wr = _wu2[_wu2["주차"].astype(str).str.strip() == str(week_str).strip()]
-                if _wr.empty:
-                    return None
-                _wstart = str(_wr.iloc[0].get("시작일", ""))
-                _wend = (pd.to_datetime(_wstart) + pd.Timedelta(days=6)).strftime("%Y-%m-%d")
-                _db2 = get_db_data("raw_safety_check")
-                if _db2.empty or "date" not in _db2.columns:
-                    return None
-                _wdb = _db2[(_db2["date"] >= _wstart) & (_db2["date"] <= _wend)]
-                if _wdb.empty:
-                    return None
-                _agg = _wdb.groupby("date").agg(
-                    confirm=("confirm_count", "sum"),
-                    send=("alarm_send_count", "sum"),
-                ).reset_index()
-                _agg["_r"] = (_agg["confirm"] / _agg["send"].replace(0, float("nan")) * 100).round(1)
-                _valid = _agg[_agg["_r"] > 0]["_r"]
-                return round(float(_valid.mean()), 1) if not _valid.empty else None
-            except Exception:
-                return None
-
-        _cr = _db_checkin_rate(selected_week)
-        if _cr is not None:
-            summary["안부체크율"] = _cr
-        if prev_week:
-            _cr_prev = _db_checkin_rate(prev_week)
-            if _cr_prev is not None:
-                prev_summary["안부체크율"] = _cr_prev
 
         st.markdown(f'<div class="section-header">📅 {selected_week}주차 ({summary.get("시작일", "")}) 운영 현황</div>', unsafe_allow_html=True)
 
@@ -1150,7 +1118,7 @@ if page == "📋 Summary":
             ("총 협약인원", total_contract, 0, "명", "metric-card", False, ",.0f"),
             ("총 가입완료", cur_registered, prev_registered, "명", "metric-card-green", False, ",.0f"),
             ("전체 가입률", total_reg_rate, 0, "%", "metric-card", False, ".1f"),
-            ("안부체크율", round(float(summary.get("안부체크율", 0)), 1), round(float(prev_summary.get("안부체크율", 0)), 1), "%", "metric-card-orange", False, ".1f"),
+            ("안부확인율", round(float(summary.get("안부확인율", summary.get("안부체크율", 0))), 1), round(float(prev_summary.get("안부확인율", prev_summary.get("안부체크율", 0))), 1), "%", "metric-card-orange", False, ".1f"),
         ]
         for col, (label, val, prev_val, suffix, card_cls, invert, fmt) in zip(cols, kpi_data):
             delta = float(val) - float(prev_val) if prev_val else 0
