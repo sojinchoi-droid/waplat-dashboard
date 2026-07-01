@@ -836,7 +836,7 @@ def plot_weekly_series(df, x_col, y_col, title, color="#2F5496", height=300):
 
     fig.update_layout(
         title=title, height=height,
-        margin=dict(t=40, b=60, l=40, r=10),
+        margin=dict(t=40, b=60, l=40, r=60),
         hovermode="x unified",
         xaxis=dict(type="category", title=""),
         yaxis_title="",
@@ -928,7 +928,7 @@ def plot_municipality_bar(df, value_col, title, color_map=None, height=400):
                  color_discrete_map={"수도권": "#2F5496", "비수도권": "#FF6F00", "기관": "#7B1FA2", "기타": "#9E9E9E"},
                  height=max(height, len(df_sorted) * 28))
     fig.update_layout(
-        title=title, margin=dict(t=40, b=10, l=10, r=10),
+        title=title, margin=dict(t=40, b=10, l=10, r=60),
         xaxis_title="", yaxis_title="",
         legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
     )
@@ -1064,7 +1064,7 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
 
     fig.update_layout(
         title=title, height=height,
-        margin=dict(t=40, b=60, l=40, r=10),
+        margin=dict(t=40, b=60, l=40, r=60),
         hovermode="x unified",
         legend=LEGEND_BELOW,
         xaxis=dict(type="category", title=""),
@@ -2781,7 +2781,7 @@ elif page == "🔄 4.안부체크 변경(베이직)":
                         title="지자체별 안부상태 변경건 추이", height=400,
                         xaxis=dict(type="category", categoryorder="array", categoryarray=sorted_dates),
                         hovermode="x unified",
-                        margin=dict(t=40, b=60, l=40, r=10),
+                        margin=dict(t=40, b=60, l=40, r=60),
                         legend=LEGEND_BELOW_LARGE,
                     )
                     st.plotly_chart(fig2, use_container_width=True)
