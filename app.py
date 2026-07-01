@@ -461,45 +461,7 @@ try:
     sheets, data = load_all_data()
     DATA_LOADED = True
 
-    # 주차별 안부확인율 전역 계산 — DB complete/target 직접 계산 (Sheets 컬럼 신뢰 안함)
-    _G_CR: dict = {}
-    try:
-        _gwu = data.get("weekly_users", pd.DataFrame())
-        _db_sc = (data.get("dashboard_data", {}) or {}).get("db_safety_check", pd.DataFrame())
-        if _db_sc is None or (isinstance(_db_sc, pd.DataFrame) and _db_sc.empty):
-            try:
-                _db_sc = get_db_data("raw_safety_check")
-            except Exception:
-                _db_sc = pd.DataFrame()
-        if (not isinstance(_db_sc, pd.DataFrame) or _db_sc.empty or
-                "date" not in _db_sc.columns or
-                "complete_user_count" not in _db_sc.columns or
-                "target_user_count" not in _db_sc.columns or
-                _gwu.empty):
-            raise ValueError("skip")
-        # 날짜→주차 매핑
-        _gwmap = {}
-        for _, _gr in _gwu.iterrows():
-            _gs = pd.to_datetime(str(_gr.get("시작일", "")), errors="coerce")
-            if pd.isna(_gs):
-                continue
-            _gw = str(_gr.get("주차", "")).strip()
-            for _gi in range(7):
-                _gwmap[(_gs + pd.Timedelta(days=_gi)).strftime("%Y-%m-%d")] = _gw
-        # 일별 전체 합산 후 안부확인율 계산 (complete / target)
-        _db_daily = _db_sc.groupby("date").agg(
-            _comp=("complete_user_count", "sum"),
-            _tgt=("target_user_count", "sum"),
-        ).reset_index()
-        _db_daily["_cr"] = (
-            _db_daily["_comp"] / _db_daily["_tgt"].replace(0, float("nan")) * 100
-        ).round(1)
-        _db_daily = _db_daily[_db_daily["_cr"] > 0].copy()
-        _db_daily["_wk"] = _db_daily["date"].map(_gwmap)
-        _db_daily = _db_daily[_db_daily["_wk"].notna()]
-        _G_CR = _db_daily.groupby("_wk")["_cr"].mean().round(1).to_dict()
-    except Exception:
-        pass
+    _G_CR: dict = {}  # 미사용 (KPI 카드는 get_week_summary의 안부체크율 사용)
     # 최초 1회: Google Sheets에서 지자체 자동 등록 + 안부확인 raw 데이터 임포트
     if "agency_seeded" not in st.session_state:
         seeded = seed_agencies_from_sheets(sheets)
@@ -1098,11 +1060,6 @@ if page == "📋 Summary":
         prev_week = get_prev_week(selected_week)
         prev_summary = cached_week_summary(sheets, data, prev_week) if prev_week else {}
 
-        # 안부확인율: 전역 _G_CR에서 직접 조회
-        if str(selected_week).strip() in _G_CR:
-            summary["안부확인율"] = _G_CR[str(selected_week).strip()]
-        if prev_week and str(prev_week).strip() in _G_CR:
-            prev_summary["안부확인율"] = _G_CR[str(prev_week).strip()]
 
         st.markdown(f'<div class="section-header">📅 {selected_week}주차 ({summary.get("시작일", "")}) 운영 현황</div>', unsafe_allow_html=True)
 
@@ -1161,7 +1118,7 @@ if page == "📋 Summary":
             ("총 협약인원", total_contract, 0, "명", "metric-card", False, ",.0f"),
             ("총 가입완료", cur_registered, prev_registered, "명", "metric-card-green", False, ",.0f"),
             ("전체 가입률", total_reg_rate, 0, "%", "metric-card", False, ".1f"),
-            ("안부확인율", round(float(summary.get("안부확인율", summary.get("안부체크율", 0))), 1), round(float(prev_summary.get("안부확인율", prev_summary.get("안부체크율", 0))), 1), "%", "metric-card-orange", False, ".1f"),
+            ("안부체크율", round(float(summary.get("안부체크율", 0)), 1), round(float(prev_summary.get("안부체크율", 0)), 1), "%", "metric-card-orange", False, ".1f"),
         ]
         for col, (label, val, prev_val, suffix, card_cls, invert, fmt) in zip(cols, kpi_data):
             delta = float(val) - float(prev_val) if prev_val else 0
