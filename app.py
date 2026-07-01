@@ -1940,9 +1940,10 @@ elif page == "🖐 2.안부확인":
                         tickmode="array", tickvals=_tick_vals,
                         tickangle=-45, tickfont=dict(size=11),
                         range=[-0.5, _n_cr - 0.5],
+                        automargin=True,
                     ),
                     yaxis=dict(title="안부확인율 (%)", range=[0, 100]),
-                    margin=dict(t=40, b=80, r=60),
+                    margin=dict(t=40, b=80, r=80),
                 )
                 st.plotly_chart(fig_cr, use_container_width=True)
 
@@ -2479,9 +2480,10 @@ elif page == "📊 3.안부체크율":
                     tickmode="array", tickvals=tick_vals,
                     tickangle=-45, tickfont=dict(size=11),
                     range=[-0.5, n_pts - 0.5],
+                    automargin=True,
                 ),
                 yaxis=dict(title="안부체크율 (%)", range=[0, 100]),
-                margin=dict(t=45, b=90, r=60),
+                margin=dict(t=45, b=90, r=80),
             )
             st.plotly_chart(fig_ab, use_container_width=True)
             st.markdown("---")
