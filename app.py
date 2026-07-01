@@ -1206,16 +1206,16 @@ if page == "📋 Summary":
 
             agencies_df = get_agency_master()
             if not agencies_df.empty:
-                # 4주 내 계약 시작 예정
+                # 4주 내 계약 시작 예정 (오늘 이후만 — 오늘 시작은 recently_started에 포함)
                 starting_soon = agencies_df[
-                    (agencies_df["contract_start"] >= today) &
+                    (agencies_df["contract_start"] > today) &
                     (agencies_df["contract_start"] <= four_weeks_later) &
                     (agencies_df["contract_start"] != "")
                 ].copy()
 
-                # 4주 내 계약 종료 예정
+                # 4주 내 계약 종료 예정 (오늘 이후만 — 오늘 종료는 recently_ended에 포함)
                 ending_soon = agencies_df[
-                    (agencies_df["contract_end"] >= today) &
+                    (agencies_df["contract_end"] > today) &
                     (agencies_df["contract_end"] <= four_weeks_later) &
                     (agencies_df["contract_end"] != "")
                 ].copy()
