@@ -1113,12 +1113,11 @@ if page == "📋 Summary":
         delta_registered = cur_registered - prev_registered
 
         # KPI 카드
-        cols = st.columns(4)
+        cols = st.columns(3)
         kpi_data = [
             ("총 협약인원", total_contract, 0, "명", "metric-card", False, ",.0f"),
             ("총 가입완료", cur_registered, prev_registered, "명", "metric-card-green", False, ",.0f"),
             ("전체 가입률", total_reg_rate, 0, "%", "metric-card", False, ".1f"),
-            ("안부확인율", round(float(summary.get("안부확인율", summary.get("안부체크율", 0))), 1), round(float(prev_summary.get("안부확인율", prev_summary.get("안부체크율", 0))), 1), "%", "metric-card-orange", False, ".1f"),
         ]
         for col, (label, val, prev_val, suffix, card_cls, invert, fmt) in zip(cols, kpi_data):
             delta = float(val) - float(prev_val) if prev_val else 0
