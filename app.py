@@ -562,6 +562,12 @@ with st.sidebar:
 
     st.divider()
 
+    if st.button("🔄 데이터 새로고침", use_container_width=True, help="캐시를 초기화하고 Google Sheets에서 최신 데이터를 불러옵니다"):
+        st.cache_data.clear()
+        st.rerun()
+
+    st.divider()
+
     # 페이지 선택
     page = st.radio(
         "페이지 선택",
