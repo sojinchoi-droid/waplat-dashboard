@@ -452,10 +452,8 @@ def cached_heatmap(_data: dict, week: str) -> "pd.DataFrame":
     return build_municipality_heatmap_data(_data, week)
 
 
-@st.cache_data(ttl=14400, show_spinner=False)
-def cached_week_summary(_sheets: dict, _data: dict, week: str) -> dict:
-    """주차 요약 — 주차별 캐시"""
-    return get_week_summary(_sheets, _data, week)
+def cached_week_summary(sheets: dict, data: dict, week: str) -> dict:
+    return get_week_summary(sheets, data, week)
 
 try:
     sheets, data = load_all_data()
