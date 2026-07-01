@@ -1211,28 +1211,28 @@ if page == "📋 Summary":
                     (agencies_df["contract_start"] > today) &
                     (agencies_df["contract_start"] <= four_weeks_later) &
                     (agencies_df["contract_start"] != "")
-                ].copy()
+                ].copy().sort_values("contract_start")
 
                 # 4주 내 계약 종료 예정 (오늘 이후만 — 오늘 종료는 recently_ended에 포함)
                 ending_soon = agencies_df[
                     (agencies_df["contract_end"] > today) &
                     (agencies_df["contract_end"] <= four_weeks_later) &
                     (agencies_df["contract_end"] != "")
-                ].copy()
+                ].copy().sort_values("contract_end")
 
                 # 최근 4주 내 계약 시작됨
                 recently_started = agencies_df[
                     (agencies_df["contract_start"] >= four_weeks_ago) &
                     (agencies_df["contract_start"] <= today) &
                     (agencies_df["contract_start"] != "")
-                ].copy()
+                ].copy().sort_values("contract_start")
 
                 # 최근 4주 내 계약 종료됨
                 recently_ended = agencies_df[
                     (agencies_df["contract_end"] >= four_weeks_ago) &
                     (agencies_df["contract_end"] <= today) &
                     (agencies_df["contract_end"] != "")
-                ].copy()
+                ].copy().sort_values("contract_end")
 
                 alert_col1, alert_col2 = st.columns(2)
 
