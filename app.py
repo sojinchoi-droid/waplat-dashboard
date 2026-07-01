@@ -810,6 +810,8 @@ MUNICIPALITY_COLORS = {
 def plot_weekly_series(df, x_col, y_col, title, color="#2F5496", height=300):
     """주간 시계열 차트 — 최신 포인트 강조 + 전주 대비 변화 표시"""
     df = shorten_dates_in_df(df, x_col)
+    # 최신 13주만 표시 (한 화면에 맞춤)
+    df = df.tail(13).reset_index(drop=True)
     fig = px.area(df, x=x_col, y=y_col, color_discrete_sequence=[color])
 
     # 최신 데이터 포인트 강조 + 전주 대비 어노테이션
@@ -834,11 +836,12 @@ def plot_weekly_series(df, x_col, y_col, title, color="#2F5496", height=300):
             hoverinfo="skip",
         ))
 
+    n = len(df)
     fig.update_layout(
         title=title, height=height,
         margin=dict(t=40, b=60, l=40, r=60),
         hovermode="x unified",
-        xaxis=dict(type="category", title=""),
+        xaxis=dict(type="category", title="", range=[-0.5, n - 0.5]),
         yaxis_title="",
     )
     fig.update_traces(
