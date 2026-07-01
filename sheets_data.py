@@ -1119,15 +1119,17 @@ def build_dashboard_data(sheets: dict) -> dict:
     else:
         result["주차목록"] = []
 
-    # 10. 주차별 안부확인율 사전 계산 (checkin_daily 기반, get_week_summary에서 조회)
+    # 10. 주차별 안부확인율 사전 계산 — C열(안부확인완료자)/B열(전체회원)*100 직접 계산
     _cd = result.get("checkin_daily", pd.DataFrame())
     _wu = result.get("weekly_users", pd.DataFrame())
     _weekly_cr = {}
-    if not _cd.empty and "안부확인율" in _cd.columns and not _wu.empty:
+    if not _cd.empty and not _wu.empty:
         _date_col = next((c for c in _cd.columns
                           if str(c).replace("\n","").strip().lower() in ("날짜","date","일자","일")
                           or "날짜" in str(c) or "date" in str(c).lower()), None)
-        if _date_col and "주차" in _wu.columns and "시작일" in _wu.columns:
+        _comp_col = next((c for c in _cd.columns if "완료자" in str(c) and "안부확인" in str(c)), None)
+        _total_col = next((c for c in _cd.columns if str(c).replace("\n","").strip() in ("전체회원", "전체 회원")), None)
+        if _date_col and _comp_col and _total_col and "주차" in _wu.columns and "시작일" in _wu.columns:
             try:
                 _wmap = {}
                 for _, _r in _wu.iterrows():
@@ -1137,11 +1139,14 @@ def build_dashboard_data(sheets: dict) -> dict:
                     _wk = str(_r["주차"]).strip()
                     for _i in range(7):
                         _wmap[(_rs + pd.Timedelta(days=_i)).strftime("%Y-%m-%d")] = _wk
-                _dt = pd.to_datetime(_cd[_date_col].astype(str), errors="coerce")
                 _cd2 = _cd.copy()
+                _cd2["_comp"] = _cd2[_comp_col].apply(safe_numeric)
+                _cd2["_total"] = _cd2[_total_col].apply(safe_numeric)
+                _cd2["_cr"] = (_cd2["_comp"] / _cd2["_total"].replace(0, float("nan")) * 100).round(1)
+                _dt = pd.to_datetime(_cd2[_date_col].astype(str), errors="coerce")
                 _cd2["_wk"] = _dt.dt.strftime("%Y-%m-%d").map(_wmap)
-                _cd2 = _cd2[_cd2["_wk"].notna() & (_cd2["안부확인율"] > 0)]
-                _weekly_cr = _cd2.groupby("_wk")["안부확인율"].mean().round(1).to_dict()
+                _cd2 = _cd2[_cd2["_wk"].notna() & (_cd2["_cr"] > 0) & (_cd2["_cr"] < 100)]
+                _weekly_cr = _cd2.groupby("_wk")["_cr"].mean().round(1).to_dict()
             except Exception:
                 pass
     result["weekly_안부확인율"] = _weekly_cr
