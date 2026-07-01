@@ -1880,12 +1880,26 @@ elif page == "🖐 2.안부확인":
 
         # ── Tab 3: 일별 안부확인율 + 지자체별 안부확인율 (주간)
         with tab3:
-            # 일별 안부확인율 = complete_user_count / target_user_count × 100
-            if "complete_user_count" in daily.columns and "target_user_count" in daily.columns:
+            # 일별 안부확인율 = 안부확인완료자(C열) / 전체회원(B열) × 100 (Sheets 기준)
+            _cd_cr = data.get("checkin_daily", pd.DataFrame())
+            _comp_c = next((c for c in _cd_cr.columns if "완료자" in str(c) and "안부확인" in str(c)), None)
+            _total_c = next((c for c in _cd_cr.columns if str(c).replace("\n","").strip() in ("전체회원", "전체 회원")), None)
+            _date_c = next((c for c in _cd_cr.columns if "날짜" in str(c) or str(c).lower() == "date"), None)
+            if _comp_c and _total_c and _date_c and not _cd_cr.empty:
+                _cd_cr2 = _cd_cr[[_date_c, _comp_c, _total_c]].copy()
+                _cd_cr2 = shorten_dates_in_df(_cd_cr2, _date_c)
+                _cd_cr2["안부확인율"] = (
+                    _cd_cr2[_comp_c].apply(safe_numeric)
+                    / _cd_cr2[_total_c].apply(safe_numeric).replace(0, float("nan")) * 100
+                ).round(1).fillna(0)
+                _cr_map = dict(zip(_cd_cr2[_date_c], _cd_cr2["안부확인율"]))
+                daily["안부확인율"] = daily["date"].map(_cr_map).fillna(0)
+            elif "complete_user_count" in daily.columns and "target_user_count" in daily.columns:
                 daily["안부확인율"] = (
                     daily["complete_user_count"]
                     / daily["target_user_count"].replace(0, float("nan")) * 100
                 ).round(1).fillna(0)
+            if "안부확인율" in daily.columns and daily["안부확인율"].sum() > 0:
                 # 최근 90일만 표시 (최신 날짜가 오른쪽에 꽉 차도록)
                 _cr_daily = daily.sort_values("date").tail(90).reset_index(drop=True)
                 fig_cr = go.Figure()
@@ -1902,7 +1916,7 @@ elif page == "🖐 2.안부확인":
                 _tick_vals = _cr_dates[::_step]
                 _n_cr = len(_cr_dates)
                 fig_cr.update_layout(
-                    title=f"일별 안부확인율 (완료자 / 대상자) — 최근 {_n_cr}일",
+                    title=f"일별 안부확인율 (안부확인완료자 / 전체회원) — 최근 {_n_cr}일",
                     height=350, hovermode="x unified",
                     xaxis=dict(
                         type="category", title="",

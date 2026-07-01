@@ -1145,7 +1145,7 @@ def build_dashboard_data(sheets: dict) -> dict:
                 _cd2["_cr"] = (_cd2["_comp"] / _cd2["_total"].replace(0, float("nan")) * 100).round(1)
                 _dt = pd.to_datetime(_cd2[_date_col].astype(str), errors="coerce")
                 _cd2["_wk"] = _dt.dt.strftime("%Y-%m-%d").map(_wmap)
-                _cd2 = _cd2[_cd2["_wk"].notna() & (_cd2["_cr"] > 0) & (_cd2["_cr"] < 100)]
+                _cd2 = _cd2[_cd2["_wk"].notna() & (_cd2["_cr"] > 0) & (_cd2["_cr"] < 100.0)]
                 _weekly_cr = _cd2.groupby("_wk")["_cr"].mean().round(1).to_dict()
             except Exception:
                 pass
