@@ -475,6 +475,16 @@ except Exception as e:
     DATA_LOADED = False
     sheets, data = {}, {}
 
+# 시트 H열(사업구분)이 있으면 BUSINESS_TYPE_MAP을 동적으로 덮어씀
+# → 계약 변경 시 시트만 수정하면 자동 반영
+_reg_biz = data.get("registration", pd.DataFrame())
+if not _reg_biz.empty and "사업구분" in _reg_biz.columns:
+    BUSINESS_TYPE_MAP = {
+        str(row["지자체명"]): str(row["사업구분"])
+        for _, row in _reg_biz.iterrows()
+        if str(row.get("사업구분", "")).strip() not in ("", "nan")
+    }
+
 # ============================================================
 # 상태 색상 / 배지
 # ============================================================
