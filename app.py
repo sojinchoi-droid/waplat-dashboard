@@ -1273,6 +1273,9 @@ if page == "📋 Summary":
         _all_biz_s = {b: {"count": 0, "users": 0, "names": []} for b in BUSINESS_TYPE_ORDER}
         if not _reg_df_s.empty and "지자체명" in _reg_df_s.columns:
             for _, _row in _reg_df_s.iterrows():
+                # 협약인원이 0인 패딩 행 제외 (계약 없는 placeholder)
+                if safe_numeric(_row.get("협약인원", 0)) <= 0:
+                    continue
                 _nm = str(_row["지자체명"]).strip()
                 _b  = _biz_classify(_nm)
                 if _b not in _all_biz_s:
