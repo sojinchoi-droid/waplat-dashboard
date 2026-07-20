@@ -44,6 +44,10 @@ from local_db import (
     get_all_agencies, get_agency_summary,
     get_note, save_note,
 )
+from sheets_data import (
+    get_sheet_note, save_sheet_note,
+    get_safe_status_from_sheet, save_safe_status_to_sheet,
+)
 
 # ============================================================
 # 페이지 설정
@@ -1448,14 +1452,16 @@ if page == "📋 Summary":
 
             st.markdown("")
 
-            # 세이프 대상 지자체 현황
-            try:
-                from local_db import get_connection as _gc
-                _conn = _gc()
-                safe_status = pd.read_sql_query("SELECT * FROM safe_agency_status ORDER BY monitoring_start_date", _conn)
-                _conn.close()
-            except:
-                safe_status = pd.DataFrame()
+            # 세이프 대상 지자체 현황 — Google Sheet 우선, SQLite fallback
+            safe_status = get_safe_status_from_sheet()
+            if safe_status.empty:
+                try:
+                    from local_db import get_connection as _gc
+                    _conn = _gc()
+                    safe_status = pd.read_sql_query("SELECT * FROM safe_agency_status ORDER BY monitoring_start_date", _conn)
+                    _conn.close()
+                except Exception:
+                    safe_status = pd.DataFrame()
 
             st.markdown('<div class="section-header">🛡 세이프 대상 지자체 현황</div>', unsafe_allow_html=True)
 
@@ -1487,7 +1493,8 @@ if page == "📋 Summary":
 
             # 계약 시작 / 명단 미등록 지자체 메모
             st.markdown("**📋 계약 시작 / 명단 미등록 지자체**")
-            _pending_note = get_note("pending_agencies", "영월군청")
+            # Google Sheet '메모' 탭 우선 → 없으면 로컬 SQLite fallback
+            _pending_note = get_sheet_note("pending_agencies") or get_note("pending_agencies", "영월군청")
             _note_col, _btn_col = st.columns([5, 1])
             with _note_col:
                 _new_note = st.text_area(
@@ -1499,8 +1506,12 @@ if page == "📋 Summary":
                 )
             with _btn_col:
                 if st.button("저장", key="save_pending_note", use_container_width=True):
-                    save_note("pending_agencies", _new_note)
-                    st.success("저장됨")
+                    _saved = save_sheet_note("pending_agencies", _new_note)
+                    if _saved:
+                        st.success("저장됨 ✓")
+                    else:
+                        save_note("pending_agencies", _new_note)
+                        st.warning("시트 저장 실패 — 로컬에만 저장됨")
 
             # 파일 업로드 + 로컬 경로 + 수동 편집
             _safe_expander_open = st.session_state.get("safe_expander_open", False)
@@ -1583,12 +1594,9 @@ if page == "📋 Summary":
 
                                     if st.button("💾 이 데이터로 세이프 현황 업데이트", key="upload_safe_save"):
                                         try:
-                                            from local_db import get_connection as _gc2
-                                            _conn2 = _gc2()
-                                            _conn2.execute("DELETE FROM safe_agency_status")
-
+                                            # 컬럼명 유연 매칭 → 정규화된 행 목록 생성
+                                            normalized_rows = []
                                             for rd in rows_data:
-                                                # 컬럼명 유연 매칭
                                                 agency_name = ""
                                                 start_date = ""
                                                 memo = ""
@@ -1616,17 +1624,43 @@ if page == "📋 Summary":
 
                                                 r_rate = round(registered / contract * 100, 1) if contract > 0 else 0
                                                 j_rate = round(joined / contract * 100, 1) if contract > 0 else 0
+                                                normalized_rows.append({
+                                                    "monitoring_start_date": start_date,
+                                                    "memo": memo,
+                                                    "agency_name": agency_name,
+                                                    "contract_users": contract,
+                                                    "registered_users": registered,
+                                                    "joined_users": joined,
+                                                    "registered_rate": r_rate,
+                                                    "joined_rate": j_rate,
+                                                })
 
+                                            # 1) Google Sheets에 저장 (영구)
+                                            _sheet_saved = save_safe_status_to_sheet(normalized_rows)
+
+                                            # 2) SQLite에도 저장 (세션 내 즉시 반영용)
+                                            from local_db import get_connection as _gc2
+                                            _conn2 = _gc2()
+                                            _conn2.execute("DELETE FROM safe_agency_status")
+                                            for nr in normalized_rows:
                                                 _conn2.execute("""
                                                     INSERT INTO safe_agency_status
                                                     (monitoring_start_date, memo, agency_name, contract_users, registered_users, joined_users, registered_rate, joined_rate)
                                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                                """, (start_date, memo, agency_name, contract, registered, joined, r_rate, j_rate))
-
+                                                """, (
+                                                    nr["monitoring_start_date"], nr["memo"], nr["agency_name"],
+                                                    nr["contract_users"], nr["registered_users"], nr["joined_users"],
+                                                    nr["registered_rate"], nr["joined_rate"],
+                                                ))
                                             _conn2.commit()
                                             _conn2.close()
-                                            st.success("✅ 세이프 현황이 업데이트되었습니다!")
-                                            # 업로드 bytes 초기화 — expander는 열린 채 유지
+
+                                            if _sheet_saved:
+                                                st.success("✅ 세이프 현황이 업데이트되었습니다! (시트에 영구 저장됨)")
+                                            else:
+                                                st.success("✅ 세이프 현황이 업데이트되었습니다!")
+                                                st.warning("⚠️ 시트 저장 실패 — 재시작 시 초기화될 수 있습니다. 서비스 계정을 설정해주세요.")
+
                                             st.session_state.pop("safe_upload_bytes", None)
                                             st.session_state.pop("safe_upload_name", None)
                                             st.session_state["safe_expander_open"] = True
@@ -1655,9 +1689,7 @@ if page == "📋 Summary":
 
                     if st.button("💾 세이프 현황 저장", key="save_safe_status"):
                         try:
-                            from local_db import get_connection as _gc2
-                            _conn2 = _gc2()
-                            _conn2.execute("DELETE FROM safe_agency_status")
+                            normalized_rows_manual = []
                             for _, r in edited_safe.iterrows():
                                 agency = str(r.get("지자체명", "")).strip()
                                 if not agency:
@@ -1667,14 +1699,38 @@ if page == "📋 Summary":
                                 call = int(r.get("가입이용자", 0))
                                 m_rate = round(mon / target * 100, 1) if target > 0 else 0
                                 c_rate = round(call / target * 100, 1) if target > 0 else 0
+                                normalized_rows_manual.append({
+                                    "monitoring_start_date": str(r.get("관제시작일", "")),
+                                    "memo": str(r.get("비고", "")),
+                                    "agency_name": agency,
+                                    "contract_users": target,
+                                    "registered_users": mon,
+                                    "joined_users": call,
+                                    "registered_rate": m_rate,
+                                    "joined_rate": c_rate,
+                                })
+
+                            _sheet_saved_m = save_safe_status_to_sheet(normalized_rows_manual)
+
+                            from local_db import get_connection as _gc2
+                            _conn2 = _gc2()
+                            _conn2.execute("DELETE FROM safe_agency_status")
+                            for nr in normalized_rows_manual:
                                 _conn2.execute("""
                                     INSERT INTO safe_agency_status
                                     (monitoring_start_date, memo, agency_name, contract_users, registered_users, joined_users, registered_rate, joined_rate)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                """, (str(r.get("관제시작일", "")), str(r.get("비고", "")), agency, target, mon, call, m_rate, c_rate))
+                                """, (nr["monitoring_start_date"], nr["memo"], nr["agency_name"],
+                                      nr["contract_users"], nr["registered_users"], nr["joined_users"],
+                                      nr["registered_rate"], nr["joined_rate"]))
                             _conn2.commit()
                             _conn2.close()
-                            st.success("세이프 현황이 저장되었습니다!")
+
+                            if _sheet_saved_m:
+                                st.success("✅ 세이프 현황이 저장되었습니다! (시트에 영구 저장됨)")
+                            else:
+                                st.success("세이프 현황이 저장되었습니다!")
+                                st.warning("⚠️ 시트 저장 실패 — 재시작 시 초기화될 수 있습니다. 서비스 계정을 설정해주세요.")
                             st.rerun()
                         except Exception as e:
                             st.error(f"저장 실패: {e}")

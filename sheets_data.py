@@ -1489,3 +1489,148 @@ if __name__ == "__main__":
         print(heatmap[["지자체명", "가입완료율", "앱삭제율", "종합상태"]].to_string())
 
     print("\n[OK] 테스트 완료!")
+
+
+# ============================================================
+# Google Sheets 기반 메모 저장 (Streamlit Cloud 영구 저장용)
+# ============================================================
+
+def _get_gspread_client():
+    """서비스 계정으로 gspread 클라이언트 반환. st.secrets에 gcp_service_account 없으면 None."""
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        import streamlit as st
+
+        if "gcp_service_account" not in st.secrets:
+            return None
+
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+        ]
+        creds = Credentials.from_service_account_info(
+            dict(st.secrets["gcp_service_account"]),
+            scopes=scopes,
+        )
+        return gspread.authorize(creds)
+    except Exception:
+        return None
+
+
+def get_sheet_note(key: str, default: str = "") -> str:
+    """Google Sheet '메모' 탭에서 key에 해당하는 값을 읽어 반환. 실패 시 default 반환."""
+    gc = _get_gspread_client()
+    if gc is None:
+        return default
+    try:
+        import gspread
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("메모")
+        except gspread.WorksheetNotFound:
+            return default
+        records = ws.get_all_records()
+        for row in records:
+            if str(row.get("key", "")) == key:
+                return str(row.get("value", default))
+        return default
+    except Exception:
+        return default
+
+
+def save_sheet_note(key: str, value: str) -> bool:
+    """Google Sheet '메모' 탭에 key-value 저장. 탭이 없으면 자동 생성. 성공 시 True 반환."""
+    gc = _get_gspread_client()
+    if gc is None:
+        return False
+    try:
+        import gspread
+        from datetime import datetime
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("메모")
+        except gspread.WorksheetNotFound:
+            ws = sh.add_worksheet(title="메모", rows=100, cols=3)
+            ws.append_row(["key", "value", "updated_at"])
+
+        records = ws.get_all_records()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for i, row in enumerate(records, start=2):  # header row=1, data starts=2
+            if str(row.get("key", "")) == key:
+                ws.update(f"B{i}:C{i}", [[value, now_str]])
+                return True
+        ws.append_row([key, value, now_str])
+        return True
+    except Exception:
+        return False
+
+
+# ============================================================
+# Google Sheets 기반 세이프 현황 저장 (Streamlit Cloud 영구 저장용)
+# ============================================================
+
+_SAFE_STATUS_COLS = [
+    "monitoring_start_date", "memo", "agency_name",
+    "contract_users", "registered_users", "joined_users",
+    "registered_rate", "joined_rate",
+]
+
+
+def get_safe_status_from_sheet() -> "pd.DataFrame":
+    """Google Sheet '세이프현황' 탭에서 세이프 대상 지자체 현황을 읽어 DataFrame으로 반환."""
+    gc = _get_gspread_client()
+    if gc is None:
+        return pd.DataFrame()
+    try:
+        import gspread
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("세이프현황")
+        except gspread.WorksheetNotFound:
+            return pd.DataFrame()
+        records = ws.get_all_records()
+        if not records:
+            return pd.DataFrame()
+        df = pd.DataFrame(records)
+        for col in ["contract_users", "registered_users", "joined_users"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+        for col in ["registered_rate", "joined_rate"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def save_safe_status_to_sheet(rows: list) -> bool:
+    """세이프 현황 행 목록을 Google Sheet '세이프현황' 탭에 저장(전체 덮어쓰기). 성공 시 True."""
+    gc = _get_gspread_client()
+    if gc is None:
+        return False
+    try:
+        import gspread
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("세이프현황")
+        except gspread.WorksheetNotFound:
+            ws = sh.add_worksheet(title="세이프현황", rows=200, cols=len(_SAFE_STATUS_COLS))
+
+        # 헤더 + 데이터 일괄 업데이트
+        write_rows = [_SAFE_STATUS_COLS]
+        for r in rows:
+            write_rows.append([
+                r.get("monitoring_start_date", ""),
+                r.get("memo", ""),
+                r.get("agency_name", ""),
+                r.get("contract_users", 0),
+                r.get("registered_users", 0),
+                r.get("joined_users", 0),
+                r.get("registered_rate", 0.0),
+                r.get("joined_rate", 0.0),
+            ])
+        ws.clear()
+        ws.update("A1", write_rows)
+        return True
+    except Exception:
+        return False
