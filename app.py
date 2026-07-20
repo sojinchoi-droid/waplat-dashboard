@@ -570,7 +570,7 @@ with st.sidebar:
     st.caption("v2026-07-20")
 
     # 사업구분 필터
-    _biz_opts = ["전체"] + BUSINESS_TYPE_ORDER
+    _biz_opts = ["전체", "통합돌봄", "노인맞춤돌봄", "고독사예방", "취약지지원", "장애인지원", "퇴원환자지원", "기타"]
     selected_biz = st.radio(
         "🏷 사업구분",
         _biz_opts,
