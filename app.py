@@ -1107,7 +1107,12 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
 # 📋 Summary 페이지
 # ============================================================
 # ── 사업구분 필터 헬퍼 ──────────────────────────────────────
-_BIZ_OPTS = ["전체", "통합돌봄", "노인맞춤돌봄", "고독사예방", "취약지지원", "장애인지원", "퇴원환자지원", "기타"]
+_BIZ_ORDER_ALL = ["전체", "통합돌봄", "노인맞춤돌봄", "고독사예방", "취약지지원", "장애인지원", "퇴원환자지원", "기타"]
+
+def _active_biz_opts():
+    """BUSINESS_TYPE_MAP에 실제로 존재하는 사업구분만 순서 유지해 반환 (전체 포함)"""
+    active = set(BUSINESS_TYPE_MAP.values())
+    return [b for b in _BIZ_ORDER_ALL if b == "전체" or b in active]
 
 def biz_filter_df(df, biz, col="지자체명"):
     """페이지 내 사업구분 필터 적용"""
@@ -1124,8 +1129,9 @@ def biz_filter_df(df, biz, col="지자체명"):
     return df[df[col].apply(_match)]
 
 def biz_selector(key):
-    """페이지 내 사업구분 선택 위젯"""
-    return st.radio("사업구분 선택", _BIZ_OPTS, horizontal=True,
+    """페이지 내 사업구분 선택 위젯 — 실제 데이터에 존재하는 사업구분만 표시"""
+    opts = _active_biz_opts()
+    return st.radio("사업구분 선택", opts, horizontal=True,
                     label_visibility="collapsed", key=f"biz_{key}")
 
 def biz_agg_raw(df, biz, week_col):
