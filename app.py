@@ -1114,6 +1114,27 @@ def biz_selector(key):
     return st.radio("사업구분 선택", _BIZ_OPTS, horizontal=True,
                     label_visibility="collapsed", key=f"biz_{key}")
 
+def biz_agg_raw(df, biz, week_col):
+    """cu(주차별 집계 df)에서 사업구분 소속 지자체 컬럼만 합산 → Series 또는 None"""
+    if biz == "전체" or df.empty:
+        return None
+    skip = {"이용자비중", "합계", "비중", "전체", "_"}
+    count_cols = [c for c in df.columns
+                  if c != week_col
+                  and not any(kw in str(c) for kw in skip)]
+    matched = []
+    for col in count_cols:
+        col_n = str(col).replace(" ", "").replace("\n", "")
+        for k, v in BUSINESS_TYPE_MAP.items():
+            if v == biz:
+                k_n = k.replace(" ", "")
+                if k_n == col_n or k_n in col_n or col_n in k_n:
+                    matched.append(col)
+                    break
+    if not matched:
+        return None
+    return df[matched].apply(lambda s: s.apply(safe_numeric)).sum(axis=1)
+
 # ============================================================
 # 📑 사업구분별 분석
 # ============================================================
@@ -2538,6 +2559,12 @@ elif page == "❤ 6.심혈관체크":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
+                    if selected_biz != "전체":
+                        _biz_s = biz_agg_raw(cu, selected_biz, _wc)
+                        if _biz_s is not None:
+                            cu = cu.copy()
+                            cu["_bar"] = _biz_s
+                            bar_col_use = "_bar"
                     plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#EF5350",
                                        _rc, "전체이용비중", "#FF6F00",
                                        "심혈관체크 이용자수 + 전체이용비중")
@@ -2577,10 +2604,17 @@ elif page == "❤ 6.심혈관체크":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
+                    if selected_biz != "전체":
+                        _biz_s = biz_agg_raw(ce, selected_biz, _wc)
+                        if _biz_s is not None:
+                            ce = ce.copy()
+                            ce["_bar"] = _biz_s
+                            bar_col_use = "_bar"
                     plot_bar_rate_dual(ce, _wc, bar_col_use, "검사횟수", "#EF5350",
                                        _awc, "1인 주평균", "#455A64",
                                        "심혈관 검사횟수 + 1인 주평균", bar_unit="회", line_unit="회")
             cf = filter_by_week_range(cardio_exam, "주차", p_start, p_end, weeks) if not cardio_exam.empty else pd.DataFrame()
+            cf = biz_filter_df(cf, selected_biz)
             if not cf.empty:
                 plot_municipality_lines(cf, "지자체별 심혈관 검사횟수 추이", metric_label="검사횟수")
         else:
@@ -3600,6 +3634,12 @@ elif page == "😰 7.스트레스체크":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
+                    if selected_biz != "전체":
+                        _biz_s = biz_agg_raw(su, selected_biz, _wc)
+                        if _biz_s is not None:
+                            su = su.copy()
+                            su["_bar"] = _biz_s
+                            bar_col_use = "_bar"
                     plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#AB47BC",
                                        _rc, "전체이용비중", "#FF6F00",
                                        "스트레스체크 이용자수 + 전체이용비중")
@@ -3639,10 +3679,17 @@ elif page == "😰 7.스트레스체크":
                 else:
                     bar_col_use = _sum_col
                 if bar_col_use:
+                    if selected_biz != "전체":
+                        _biz_s = biz_agg_raw(se, selected_biz, _wc)
+                        if _biz_s is not None:
+                            se = se.copy()
+                            se["_bar"] = _biz_s
+                            bar_col_use = "_bar"
                     plot_bar_rate_dual(se, _wc, bar_col_use, "수행횟수", "#AB47BC",
                                        _awc, "1인 주평균", "#455A64",
                                        "스트레스체크 수행횟수 + 1인 주평균", bar_unit="회", line_unit="회")
             sf = filter_by_week_range(stress_count, "주차", p_start, p_end, weeks) if not stress_count.empty else pd.DataFrame()
+            sf = biz_filter_df(sf, selected_biz)
             if not sf.empty:
                 plot_municipality_lines(sf, "지자체별 스트레스체크 수행횟수 추이", metric_label="수행횟수")
         else:
