@@ -489,6 +489,32 @@ if not _reg_biz.empty and "사업구분" in _reg_biz.columns:
         if str(row.get("사업구분", "")).strip() not in ("", "nan")
     }
 
+# 협약인원 > 0인 기관만 기준으로 실제 활성 사업구분 계산
+# (이 집합만 biz_selector 라디오 버튼에 표시)
+def _compute_active_biz_types():
+    reg = data.get("registration", pd.DataFrame())
+    if reg.empty:
+        return set(BUSINESS_TYPE_MAP.values())
+    active = set()
+    for _, row in reg.iterrows():
+        try:
+            if float(row.get("협약인원", 0) or 0) > 0:
+                nm = str(row.get("지자체명", "")).strip()
+                biz = BUSINESS_TYPE_MAP.get(nm)
+                if not biz:
+                    nm_n = nm.replace(" ", "")
+                    for k, v in BUSINESS_TYPE_MAP.items():
+                        if k.replace(" ", "") == nm_n:
+                            biz = v
+                            break
+                if biz:
+                    active.add(biz)
+        except Exception:
+            pass
+    return active if active else set(BUSINESS_TYPE_MAP.values())
+
+_ACTIVE_BIZ_TYPES: set = _compute_active_biz_types()
+
 # ============================================================
 # 상태 색상 / 배지
 # ============================================================
@@ -1110,9 +1136,8 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
 _BIZ_ORDER_ALL = ["전체", "통합돌봄", "노인맞춤돌봄", "고독사예방", "취약지지원", "장애인지원", "퇴원환자지원", "기타"]
 
 def _active_biz_opts():
-    """BUSINESS_TYPE_MAP에 실제로 존재하는 사업구분만 순서 유지해 반환 (전체 포함)"""
-    active = set(BUSINESS_TYPE_MAP.values())
-    return [b for b in _BIZ_ORDER_ALL if b == "전체" or b in active]
+    """협약인원 > 0인 기관이 존재하는 사업구분만 순서 유지해 반환 (전체 포함)"""
+    return [b for b in _BIZ_ORDER_ALL if b == "전체" or b in _ACTIVE_BIZ_TYPES]
 
 def biz_filter_df(df, biz, col="지자체명"):
     """페이지 내 사업구분 필터 적용"""
