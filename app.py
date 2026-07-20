@@ -574,7 +574,6 @@ with st.sidebar:
         "페이지 선택",
         [
             "📋 Summary",
-            "📑 사업구분별",
             "👥 1.회원가입 & 이탈",
             "🖐 2.안부확인",
             "📊 3.안부체크율",
@@ -1169,222 +1168,7 @@ def biz_agg_raw(df, biz, week_col):
 
     return biz_count, biz_ratio
 
-# ============================================================
-# 📑 사업구분별 분석
-# ============================================================
-if page == "📑 사업구분별":
-    st.markdown('<div class="section-header">📑 사업구분별 서비스 이용 현황</div>', unsafe_allow_html=True)
-
-    # ── 데이터 준비 ────────────────────────────────────────────
-    cr_check = data.get("checkin_mun_check_direct", pd.DataFrame())    # 안부체크율
-    cr_rate  = data.get("checkin_mun_rate_direct",  pd.DataFrame())    # 안부확인율
-    reg_df   = data.get("registration", pd.DataFrame())                # 이용자 현황
-
-    def _biz(name):
-        """지자체명 → 사업구분 (부분 매칭 포함)"""
-        name_n = str(name).replace(" ", "")
-        for k, v in BUSINESS_TYPE_MAP.items():
-            if name_n == k.replace(" ", "") or k.replace(" ", "") in name_n or name_n in k.replace(" ", ""):
-                return v
-        return "기타"
-
-    # 이용자수(협약인원) by 지자체
-    reg_map = {}
-    if not reg_df.empty and "지자체명" in reg_df.columns and "협약인원" in reg_df.columns:
-        for _, row in reg_df.iterrows():
-            nm = str(row["지자체명"]).strip()
-            reg_map[nm] = safe_numeric(row.get("협약인원", 0))
-
-    # 사업구분 집계 함수
-    def agg_by_biz(df, val_col, label):
-        if df.empty or val_col not in df.columns or "지자체명" not in df.columns:
-            return pd.DataFrame()
-        tmp = df.copy()
-        tmp["사업구분"] = tmp["지자체명"].apply(_biz)
-        tmp[val_col] = tmp[val_col].apply(safe_numeric)
-        tmp = tmp[tmp[val_col] > 0]
-        grp = tmp.groupby("사업구분")[val_col].mean().reset_index()
-        grp.columns = ["사업구분", label]
-        grp[label] = grp[label].round(1)
-        return grp
-
-    biz_check = agg_by_biz(cr_check, "안부체크율", "안부체크율")
-    biz_rate  = agg_by_biz(cr_rate,  "안부확인율", "안부확인율")
-
-    # 사업구분별 지자체 목록 및 이용자 수
-    all_agencies_biz = {}
-    for nm in list(reg_map.keys()) + list(BUSINESS_TYPE_MAP.keys()):
-        biz = _biz(nm)
-        if biz not in all_agencies_biz:
-            all_agencies_biz[biz] = {"count": 0, "users": 0, "names": []}
-    if not reg_df.empty and "지자체명" in reg_df.columns:
-        for _, row in reg_df.iterrows():
-            nm = str(row["지자체명"]).strip()
-            biz = _biz(nm)
-            if biz not in all_agencies_biz:
-                all_agencies_biz[biz] = {"count": 0, "users": 0, "names": []}
-            all_agencies_biz[biz]["count"] += 1
-            all_agencies_biz[biz]["users"] += int(safe_numeric(row.get("협약인원", 0)))
-            if nm not in all_agencies_biz[biz]["names"]:
-                all_agencies_biz[biz]["names"].append(nm)
-
-    # ── KPI 카드 ──────────────────────────────────────────────
-    st.markdown("#### 사업구분별 지자체 / 이용자 수")
-    ordered_biz = [b for b in BUSINESS_TYPE_ORDER if b in all_agencies_biz]
-    cols = st.columns(len(ordered_biz))
-    for col, biz in zip(cols, ordered_biz):
-        info = all_agencies_biz[biz]
-        color = BUSINESS_TYPE_COLORS.get(biz, "#666")
-        col.markdown(
-            f"""<div style="background:#fff;border:2px solid {color};border-radius:14px;
-            padding:14px 12px;text-align:center">
-            <div style="font-size:12px;font-weight:700;color:{color}">{biz}</div>
-            <div style="font-size:24px;font-weight:800;color:#1e2533">{info['count']}</div>
-            <div style="font-size:11px;color:#6b7488">지자체</div>
-            <div style="font-size:16px;font-weight:700;color:{color}">{info['users']:,}</div>
-            <div style="font-size:11px;color:#6b7488">이용자(협약)</div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("---")
-
-    # ── 지자체 상세 목록 ──────────────────────────────────────
-    with st.expander("📋 사업구분별 지자체 목록", expanded=False):
-        for biz in ordered_biz:
-            if biz in all_agencies_biz:
-                names = all_agencies_biz[biz]["names"]
-                color = BUSINESS_TYPE_COLORS.get(biz, "#666")
-                st.markdown(
-                    f"**<span style='color:{color}'>{biz}</span>** ({len(names)}개): "
-                    + " · ".join(names),
-                    unsafe_allow_html=True,
-                )
-
-    st.markdown("---")
-
-    # ── 데이터 맵 준비 ─────────────────────────────────────────
-    _check_map = {}
-    _rate_map  = {}
-    if not cr_check.empty and "지자체명" in cr_check.columns:
-        for _, row in cr_check.iterrows():
-            _check_map[str(row["지자체명"]).strip()] = safe_numeric(row.get("안부체크율", 0))
-    if not cr_rate.empty and "지자체명" in cr_rate.columns:
-        for _, row in cr_rate.iterrows():
-            _rate_map[str(row["지자체명"]).strip()] = safe_numeric(row.get("안부확인율", 0))
-
-    def _extract_mun_snap(sheet_key):
-        raw = sheets.get(sheet_key, pd.DataFrame())
-        if raw.empty:
-            return {}
-        mrt = extract_mun_ratio_trend(raw)
-        if mrt.empty or "주차" not in mrt.columns:
-            return {}
-        wk = selected_week if selected_week in mrt["주차"].values else mrt["주차"].dropna().max()
-        snap = mrt[mrt["주차"] == wk]
-        if snap.empty:
-            snap = mrt[mrt["주차"] == mrt["주차"].max()]
-        return dict(zip(snap["지자체명"], snap["값"].apply(safe_numeric)))
-
-    _cardio_map = _extract_mun_snap("심혈관이용자")
-    _stress_map = _extract_mun_snap("스트레스이용자")
-
-    # ── 전체 지자체 데이터프레임 구성 ─────────────────────────
-    all_names = []
-    for biz in BUSINESS_TYPE_ORDER:
-        if biz in all_agencies_biz:
-            all_names.extend(all_agencies_biz[biz]["names"])
-
-    all_rows = []
-    for nm in all_names:
-        all_rows.append({
-            "지자체":      nm,
-            "사업구분":    _biz(nm),
-            "이용자(협약)": int(reg_map.get(nm, 0)),
-            "안부체크율":   _check_map.get(nm, 0),
-            "안부확인율":   _rate_map.get(nm, 0),
-            "심혈관이용비중": _cardio_map.get(nm, 0),
-            "스트레스이용비중": _stress_map.get(nm, 0),
-        })
-    df_all = pd.DataFrame(all_rows)
-
-    H_PER_MUN = 38
-
-    # ── 사업구분별 섹션 (스크롤) ───────────────────────────────
-    st.markdown(f"#### {selected_week} 주차 기준 — 사업구분별 지자체 현황")
-
-    for biz in BUSINESS_TYPE_ORDER:
-        if biz not in all_agencies_biz:
-            continue
-        names = all_agencies_biz[biz]["names"]
-        if not names:
-            continue
-
-        color = BUSINESS_TYPE_COLORS.get(biz, "#888")
-        df_biz = df_all[df_all["사업구분"] == biz].copy()
-        if df_biz.empty:
-            continue
-
-        # 섹션 헤더
-        st.markdown(
-            f"<h5 style='margin:28px 0 8px;padding:8px 14px;"
-            f"border-left:5px solid {color};background:{color}18;"
-            f"border-radius:4px;color:{color}'>{biz} ({len(names)}개 지자체)</h5>",
-            unsafe_allow_html=True,
-        )
-
-        # 2열: 안부체크율 | 안부확인율
-        c1, c2 = st.columns(2)
-        h = max(200, len(names) * 36 + 60)
-
-        def _biz_hbar(df_in, col, title, clr, height, container):
-            df_s = df_in[df_in[col] > 0].sort_values(col, ascending=True)
-            if df_s.empty:
-                container.caption(f"{title}: 데이터 없음")
-                return
-            fig = px.bar(
-                df_s, x=col, y="지자체", orientation="h",
-                text=col, height=height, title=title,
-                color_discrete_sequence=[clr],
-            )
-            fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-            fig.update_layout(
-                showlegend=False,
-                margin=dict(t=36, b=4, l=4, r=60),
-                xaxis=dict(range=[0, 108]),
-                xaxis_title="", yaxis_title="",
-            )
-            container.plotly_chart(fig, use_container_width=True)
-
-        _biz_hbar(df_biz, "안부체크율",   "📊 안부체크율 (%)",   color, h, c1)
-        _biz_hbar(df_biz, "안부확인율",   "✅ 안부확인율 (%)",   color, h, c2)
-
-        # 2열: 심혈관 | 스트레스
-        c3, c4 = st.columns(2)
-        _biz_hbar(df_biz, "심혈관이용비중",  "❤ 심혈관 이용자비중 (%)",   color, h, c3)
-        _biz_hbar(df_biz, "스트레스이용비중", "😰 스트레스 이용자비중 (%)", color, h, c4)
-
-        # 수치 테이블
-        df_tbl = df_biz[["지자체", "이용자(협약)", "안부체크율", "안부확인율", "심혈관이용비중", "스트레스이용비중"]].rename(columns={
-            "안부체크율": "안부체크율(%)", "안부확인율": "안부확인율(%)",
-            "심혈관이용비중": "심혈관(%)", "스트레스이용비중": "스트레스(%)",
-        })
-        st.dataframe(
-            df_tbl,
-            use_container_width=True,
-            hide_index=True,
-            height=(len(names) + 1) * 36 + 4,
-            column_config={
-                "안부체크율(%)": st.column_config.NumberColumn(format="%.1f%%"),
-                "안부확인율(%)": st.column_config.NumberColumn(format="%.1f%%"),
-                "심혈관(%)":    st.column_config.NumberColumn(format="%.1f%%"),
-                "스트레스(%)":  st.column_config.NumberColumn(format="%.1f%%"),
-                "이용자(협약)": st.column_config.NumberColumn(format="%d명"),
-            },
-        )
-        st.markdown("<hr style='margin:4px 0 0'>", unsafe_allow_html=True)
-
-elif page == "📋 Summary":
+if page == "📋 Summary":
     if selected_week:
         summary = cached_week_summary(sheets, data, selected_week)
         prev_week = get_prev_week(selected_week)
@@ -1463,6 +1247,58 @@ elif page == "📋 Summary":
                 """, unsafe_allow_html=True)
 
         st.markdown("")
+
+        # ── 사업구분별 지자체 / 이용자 수 ─────────────────────────────
+        st.markdown('<div class="section-header">사업구분별 지자체 / 이용자 수</div>', unsafe_allow_html=True)
+        _reg_df_s = data.get("registration", pd.DataFrame())
+
+        def _biz_classify(name):
+            name_n = str(name).replace(" ", "")
+            for k, v in BUSINESS_TYPE_MAP.items():
+                if name_n == k.replace(" ", "") or k.replace(" ", "") in name_n or name_n in k.replace(" ", ""):
+                    return v
+            return "기타"
+
+        _all_biz_s = {b: {"count": 0, "users": 0, "names": []} for b in BUSINESS_TYPE_ORDER}
+        if not _reg_df_s.empty and "지자체명" in _reg_df_s.columns:
+            for _, _row in _reg_df_s.iterrows():
+                _nm = str(_row["지자체명"]).strip()
+                _b  = _biz_classify(_nm)
+                if _b not in _all_biz_s:
+                    _all_biz_s[_b] = {"count": 0, "users": 0, "names": []}
+                _all_biz_s[_b]["count"] += 1
+                _all_biz_s[_b]["users"] += int(safe_numeric(_row.get("협약인원", 0)))
+                if _nm not in _all_biz_s[_b]["names"]:
+                    _all_biz_s[_b]["names"].append(_nm)
+
+        _ordered = [b for b in BUSINESS_TYPE_ORDER if b in _all_biz_s]
+        _bcols = st.columns(len(_ordered))
+        for _col, _b in zip(_bcols, _ordered):
+            _info  = _all_biz_s[_b]
+            _color = BUSINESS_TYPE_COLORS.get(_b, "#666")
+            _col.markdown(
+                f"""<div style="background:#fff;border:2px solid {_color};border-radius:14px;
+                padding:14px 12px;text-align:center">
+                <div style="font-size:12px;font-weight:700;color:{_color}">{_b}</div>
+                <div style="font-size:24px;font-weight:800;color:#1e2533">{_info['count']}</div>
+                <div style="font-size:11px;color:#6b7488">지자체</div>
+                <div style="font-size:16px;font-weight:700;color:{_color}">{_info['users']:,}</div>
+                <div style="font-size:11px;color:#6b7488">이용자(협약)</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("")
+        with st.expander("📋 사업구분별 지자체 목록", expanded=False):
+            for _b in _ordered:
+                _names = _all_biz_s[_b]["names"]
+                _color = BUSINESS_TYPE_COLORS.get(_b, "#666")
+                st.markdown(
+                    f"**<span style='color:{_color}'>{_b}</span>** ({len(_names)}개): "
+                    + " · ".join(_names),
+                    unsafe_allow_html=True,
+                )
+        st.markdown("---")
 
         # 지자체 계약 현황 (베이직/세이프) + 계약 시작/종료 알림
         agency_sum = get_agency_summary(sheets)
