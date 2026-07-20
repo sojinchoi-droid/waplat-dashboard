@@ -1285,7 +1285,7 @@ if page == "📋 Summary":
                     _all_biz_s[_b]["names"].append(_nm)
                 _all_biz_s[_b]["users"] += int(safe_numeric(_row.get("협약인원", 0)))
 
-        _ordered = [b for b in BUSINESS_TYPE_ORDER if b in _all_biz_s]
+        _ordered = [b for b in BUSINESS_TYPE_ORDER if b in _all_biz_s and _all_biz_s[b]["count"] > 0]
         _bcols = st.columns(len(_ordered))
         for _col, _b in zip(_bcols, _ordered):
             _info  = _all_biz_s[_b]
