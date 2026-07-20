@@ -1701,31 +1701,32 @@ if page == "📋 Summary":
 elif page == "👥 1.회원가입 & 이탈":
     st.markdown('<div class="section-header">👥 회원가입 및 앱 삭제자 현황</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("member", weeks)
+    selected_biz = biz_selector("회원가입이탈")
+    st.divider()
 
     # 지자체별 회원가입 현황
-    reg = data.get("registration", pd.DataFrame())
+    reg = biz_filter_df(data.get("registration", pd.DataFrame()).copy(), selected_biz)
     wu = data.get("weekly_users", pd.DataFrame())
 
     if not reg.empty and "지자체명" in reg.columns:
-        reg = reg.copy()
-
-        # 가입률: 이용자주간 선택 주차 기준 우선 (스냅샷보다 최신)
-        wu_kpi = data.get("weekly_users", pd.DataFrame())
+        # 사업구분 선택 시 집계 시트(weekly_users)는 분리 불가 → reg 스냅샷 기준
         total_contract = 0
         total_registered = 0
-        if not wu_kpi.empty and "주차" in wu_kpi.columns:
-            _sel = wu_kpi[wu_kpi["주차"].astype(str).str.strip() == selected_week]
-            if _sel.empty:
-                _sel = wu_kpi.iloc[[-1]]
-            if not _sel.empty:
-                _r = _sel.iloc[0]
-                if "대상자수" in wu_kpi.columns:
-                    _v = safe_numeric(_r.get("대상자수", 0))
-                    if _v > 0: total_contract = int(_v)
-                if "가입완료합계" in wu_kpi.columns:
-                    _v = safe_numeric(_r.get("가입완료합계", 0))
-                    if _v > 0: total_registered = int(_v)
-        # fallback: 이용자현황 스냅샷
+        if selected_biz == "전체":
+            wu_kpi = data.get("weekly_users", pd.DataFrame())
+            if not wu_kpi.empty and "주차" in wu_kpi.columns:
+                _sel = wu_kpi[wu_kpi["주차"].astype(str).str.strip() == selected_week]
+                if _sel.empty:
+                    _sel = wu_kpi.iloc[[-1]]
+                if not _sel.empty:
+                    _r = _sel.iloc[0]
+                    if "대상자수" in wu_kpi.columns:
+                        _v = safe_numeric(_r.get("대상자수", 0))
+                        if _v > 0: total_contract = int(_v)
+                    if "가입완료합계" in wu_kpi.columns:
+                        _v = safe_numeric(_r.get("가입완료합계", 0))
+                        if _v > 0: total_registered = int(_v)
+        # fallback: 이용자현황 스냅샷 (사업구분 필터 적용)
         if total_contract == 0:
             total_contract = int(reg["협약인원"].apply(safe_numeric).sum()) if "협약인원" in reg.columns else 0
         if total_registered == 0:
@@ -1895,7 +1896,7 @@ elif page == "👥 1.회원가입 & 이탈":
     del_df = data.get("app_deletion", pd.DataFrame())
     if not del_df.empty and selected_week:
         st.markdown('<div class="section-header">지자체별 앱 삭제율</div>', unsafe_allow_html=True)
-        week_del = del_df[del_df["주차"].astype(str).str.strip() == selected_week].copy()
+        week_del = biz_filter_df(del_df[del_df["주차"].astype(str).str.strip() == selected_week].copy(), selected_biz)
         if not week_del.empty:
             # 앱삭제율이 0이고 다른 지표도 없는 지자체 제외 (계약 종료)
             # 히트맵에 있는 활성 지자체만 표시
@@ -3251,6 +3252,10 @@ elif page == "🛡 5.안부체크 변경(세이프)":
 elif page == "🎮 12.맞고(와플랫+게스트)":
     st.markdown('<div class="section-header">🎮 맞고 (와플랫+게스트)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_all", weeks)
+    selected_biz = biz_selector("맞고전체")
+    if selected_biz != "전체":
+        st.info("와플랫+게스트 통합 집계 데이터는 지자체별 분리가 없어 사업구분 필터가 반영되지 않습니다. 지자체별 사업구분 확인은 11.맞고(와플랫)을 이용하세요.")
+    st.divider()
 
     # 집계형 시트에서 직접 가져오기
     matgo_all_raw = sheets.get("맞고와플게스트", pd.DataFrame())
@@ -3348,6 +3353,8 @@ elif page == "🎮 12.맞고(와플랫+게스트)":
 elif page == "🃏 11.맞고(와플랫)":
     st.markdown('<div class="section-header">🃏 맞고 (와플랫)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_waplat", weeks)
+    selected_biz = biz_selector("맞고와플랫")
+    st.divider()
 
     tab1, tab2, tab3 = st.tabs(["이용자수", "플레이 판수", "플레이 시간"])
 
@@ -3366,17 +3373,21 @@ elif page == "🃏 11.맞고(와플랫)":
                 mu = filter_by_week_range(mu, _wc, p_start, p_end, weeks)
                 mu = shorten_dates_in_df(mu, _wc)
                 if _sum_col:
+                    _biz_cnt, _biz_rat = biz_agg_raw(mu, selected_biz, _wc)
+                    if _biz_cnt is not None:
+                        mu = mu.copy(); mu["_bar"] = _biz_cnt; _sum_col = "_bar"
+                        if _biz_rat is not None: mu["_rc"] = _biz_rat.round(1); _rc = "_rc"
                     plot_bar_rate_dual(mu, _wc, _sum_col, "이용자수", "#42A5F5",
-                                       _rc, "전체이용비중", "#FF6F00",
-                                       "맞고(와플랫) 이용자수 + 전체이용비중")
+                                       _rc, "이용비중" if selected_biz != "전체" else "전체이용비중", "#FF6F00",
+                                       "맞고(와플랫) 이용자수 + 이용비중")
             if not df.empty:
-                dff = filter_by_week_range(df, "주차", p_start, p_end, weeks)
+                dff = biz_filter_df(filter_by_week_range(df, "주차", p_start, p_end, weeks), selected_biz)
                 plot_municipality_lines(dff, "지자체별 맞고 이용자수", metric_label="이용자수")
             # ── 지자체별 이용자비중 추이 (AI~BK열) ──────────────────────────
             st.markdown("---")
             mrt_matgo = extract_mun_ratio_trend(matgo_user_raw)
             if not mrt_matgo.empty:
-                mrt_matgo = filter_by_week_range(mrt_matgo, "주차", p_start, p_end, weeks)
+                mrt_matgo = biz_filter_df(filter_by_week_range(mrt_matgo, "주차", p_start, p_end, weeks), selected_biz)
                 _active_m = mrt_matgo.groupby("지자체명")["값"].sum()
                 _active_m = _active_m[_active_m > 0].index.tolist()
                 mrt_matgo = mrt_matgo[mrt_matgo["지자체명"].isin(_active_m)]
@@ -3400,11 +3411,14 @@ elif page == "🃏 11.맞고(와플랫)":
                 mp = filter_by_week_range(mp, _wc, p_start, p_end, weeks)
                 mp = shorten_dates_in_df(mp, _wc)
                 if _sum_col:
+                    _biz_cnt, _ = biz_agg_raw(mp, selected_biz, _wc)
+                    if _biz_cnt is not None:
+                        mp = mp.copy(); mp["_bar"] = _biz_cnt; _sum_col = "_bar"; _awc = None
                     plot_bar_rate_dual(mp, _wc, _sum_col, "플레이판수", "#42A5F5",
                                        _awc, "1인 주평균", "#455A64",
                                        "맞고(와플랫) 플레이판수 + 1인 주평균", bar_unit="판", line_unit="판")
             if not df.empty:
-                dff = filter_by_week_range(df, "주차", p_start, p_end, weeks)
+                dff = biz_filter_df(filter_by_week_range(df, "주차", p_start, p_end, weeks), selected_biz)
                 plot_municipality_lines(dff, "지자체별 플레이 판수", metric_label="판수")
         else:
             st.info("데이터 없음")
@@ -3412,11 +3426,12 @@ elif page == "🃏 11.맞고(와플랫)":
     with tab3:
         df = data.get("weekly_맞고플레이시간", pd.DataFrame())
         if not df.empty:
-            df = filter_by_week_range(df, "주차", p_start, p_end, weeks)
-            total = df.pipe(weekly_total)
-            total = total.rename(columns={"값": "플레이시간합계"})
-            plot_weekly_series(total, "주차", "플레이시간합계", "맞고(와플랫) 플레이 시간 추이", "#BF360C")
-            plot_municipality_lines(df, "지자체별 플레이 시간", metric_label="시간")
+            dff = biz_filter_df(filter_by_week_range(df, "주차", p_start, p_end, weeks), selected_biz)
+            if selected_biz == "전체":
+                total = dff.pipe(weekly_total)
+                total = total.rename(columns={"값": "플레이시간합계"})
+                plot_weekly_series(total, "주차", "플레이시간합계", "맞고(와플랫) 플레이 시간 추이", "#BF360C")
+            plot_municipality_lines(dff, "지자체별 플레이 시간", metric_label="시간")
         else:
             st.info("데이터 없음")
 
@@ -3427,6 +3442,10 @@ elif page == "🃏 11.맞고(와플랫)":
 elif page == "👤 13.맞고(게스트)":
     st.markdown('<div class="section-header">👤 맞고 (게스트)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_guest", weeks)
+    selected_biz = biz_selector("맞고게스트")
+    if selected_biz != "전체":
+        st.info("게스트 데이터는 지자체 계약 미연결 이용자로, 사업구분 필터가 적용되지 않습니다.")
+    st.divider()
 
     # 집계형 시트에서 직접 가져오기
     guest_raw = sheets.get("맞고게스트", pd.DataFrame())
