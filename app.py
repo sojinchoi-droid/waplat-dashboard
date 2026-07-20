@@ -1115,25 +1115,59 @@ def biz_selector(key):
                     label_visibility="collapsed", key=f"biz_{key}")
 
 def biz_agg_raw(df, biz, week_col):
-    """cu(주차별 집계 df)에서 사업구분 소속 지자체 컬럼만 합산 → Series 또는 None"""
+    """사업구분 소속 지자체 이용자수 합산 + 이용비중 계산 → (count_Series, ratio_Series) or (None, None)"""
     if biz == "전체" or df.empty:
-        return None
+        return None, None
+
+    def _norm(s, strip_ratio=False):
+        s = str(s).replace("\n", " ").strip()
+        if strip_ratio:
+            s = s.replace("이용자비중", "").strip()
+        return s.replace(" ", "")
+
+    def _biz_match(n):
+        for k, v in BUSINESS_TYPE_MAP.items():
+            if v == biz:
+                k_n = k.replace(" ", "")
+                if k_n == n or k_n in n or n in k_n:
+                    return True
+        return False
+
     skip = {"이용자비중", "합계", "비중", "전체", "_"}
     count_cols = [c for c in df.columns
                   if c != week_col
                   and not any(kw in str(c) for kw in skip)]
-    matched = []
-    for col in count_cols:
-        col_n = str(col).replace(" ", "").replace("\n", "")
-        for k, v in BUSINESS_TYPE_MAP.items():
-            if v == biz:
-                k_n = k.replace(" ", "")
-                if k_n == col_n or k_n in col_n or col_n in k_n:
-                    matched.append(col)
-                    break
-    if not matched:
-        return None
-    return df[matched].apply(lambda s: s.apply(safe_numeric)).sum(axis=1)
+    ratio_cols  = [c for c in df.columns
+                   if "이용자비중" in str(c) and "전체이용비중" not in str(c)]
+
+    matched_count = [c for c in count_cols if _biz_match(_norm(c))]
+    matched_ratio = [c for c in ratio_cols  if _biz_match(_norm(c, True))]
+
+    if not matched_count:
+        return None, None
+
+    biz_count = df[matched_count].apply(lambda s: s.apply(safe_numeric)).sum(axis=1)
+
+    # 이용비중 = 사업구분 이용자수 / 사업구분 전체등록자수 × 100
+    # 전체등록자수 = 이용자수 / (이용자비중/100) 로 역산
+    biz_ratio = None
+    if matched_ratio:
+        ratio_norm_map = {_norm(c, True): c for c in matched_ratio}
+        total_enrolled = pd.Series(0.0, index=df.index)
+        n_matched = 0
+        for cc in matched_count:
+            cn = _norm(cc)
+            rc = next((ratio_norm_map[rn] for rn in ratio_norm_map
+                       if cn == rn or cn in rn or rn in cn), None)
+            if rc is not None:
+                cnt = df[cc].apply(safe_numeric)
+                rat = df[rc].apply(safe_numeric)
+                total_enrolled += cnt.div(rat / 100).where(rat > 0, 0)
+                n_matched += 1
+        if n_matched > 0:
+            biz_ratio = biz_count.div(total_enrolled).where(total_enrolled > 0, 0) * 100
+
+    return biz_count, biz_ratio
 
 # ============================================================
 # 📑 사업구분별 분석
@@ -2560,14 +2594,17 @@ elif page == "❤ 6.심혈관체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_s = biz_agg_raw(cu, selected_biz, _wc)
-                        if _biz_s is not None:
+                        _biz_cnt, _biz_rat = biz_agg_raw(cu, selected_biz, _wc)
+                        if _biz_cnt is not None:
                             cu = cu.copy()
-                            cu["_bar"] = _biz_s
+                            cu["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
+                            if _biz_rat is not None and _rc:
+                                cu["_rc"] = _biz_rat.round(1)
+                                _rc = "_rc"
                     plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#EF5350",
-                                       _rc, "전체이용비중", "#FF6F00",
-                                       "심혈관체크 이용자수 + 전체이용비중")
+                                       _rc, "이용비중", "#FF6F00",
+                                       "심혈관체크 이용자수 + 이용비중")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
             mrt_cardio = biz_filter_df(extract_mun_ratio_trend(cardio_user_raw), selected_biz)
             if not mrt_cardio.empty:
@@ -2605,10 +2642,10 @@ elif page == "❤ 6.심혈관체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_s = biz_agg_raw(ce, selected_biz, _wc)
-                        if _biz_s is not None:
+                        _biz_cnt, _ = biz_agg_raw(ce, selected_biz, _wc)
+                        if _biz_cnt is not None:
                             ce = ce.copy()
-                            ce["_bar"] = _biz_s
+                            ce["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
                     plot_bar_rate_dual(ce, _wc, bar_col_use, "검사횟수", "#EF5350",
                                        _awc, "1인 주평균", "#455A64",
@@ -3635,14 +3672,17 @@ elif page == "😰 7.스트레스체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_s = biz_agg_raw(su, selected_biz, _wc)
-                        if _biz_s is not None:
+                        _biz_cnt, _biz_rat = biz_agg_raw(su, selected_biz, _wc)
+                        if _biz_cnt is not None:
                             su = su.copy()
-                            su["_bar"] = _biz_s
+                            su["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
+                            if _biz_rat is not None and _rc:
+                                su["_rc"] = _biz_rat.round(1)
+                                _rc = "_rc"
                     plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#AB47BC",
-                                       _rc, "전체이용비중", "#FF6F00",
-                                       "스트레스체크 이용자수 + 전체이용비중")
+                                       _rc, "이용비중", "#FF6F00",
+                                       "스트레스체크 이용자수 + 이용비중")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
             mrt_stress = biz_filter_df(extract_mun_ratio_trend(stress_user_raw), selected_biz)
             if not mrt_stress.empty:
@@ -3680,10 +3720,10 @@ elif page == "😰 7.스트레스체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_s = biz_agg_raw(se, selected_biz, _wc)
-                        if _biz_s is not None:
+                        _biz_cnt, _ = biz_agg_raw(se, selected_biz, _wc)
+                        if _biz_cnt is not None:
                             se = se.copy()
-                            se["_bar"] = _biz_s
+                            se["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
                     plot_bar_rate_dual(se, _wc, bar_col_use, "수행횟수", "#AB47BC",
                                        _awc, "1인 주평균", "#455A64",
