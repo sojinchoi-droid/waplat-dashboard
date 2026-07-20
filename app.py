@@ -569,17 +569,6 @@ with st.sidebar:
     st.divider()
     st.caption("v2026-07-20")
 
-    # 사업구분 필터
-    _biz_opts = ["전체", "통합돌봄", "노인맞춤돌봄", "고독사예방", "취약지지원", "장애인지원", "퇴원환자지원", "기타"]
-    selected_biz = st.radio(
-        "🏷 사업구분",
-        _biz_opts,
-        index=0,
-        key="sidebar_biz_filter",
-    )
-
-    st.divider()
-
     # 페이지 선택
     page = st.radio(
         "페이지 선택",
@@ -1104,19 +1093,26 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
 # 📋 Summary 페이지
 # ============================================================
 # ── 사업구분 필터 헬퍼 ──────────────────────────────────────
-def biz_filter_df(df, col="지자체명"):
-    """사이드바 사업구분 필터 적용"""
-    if selected_biz == "전체" or df.empty or col not in df.columns:
+_BIZ_OPTS = ["전체", "통합돌봄", "노인맞춤돌봄", "고독사예방", "취약지지원", "장애인지원", "퇴원환자지원", "기타"]
+
+def biz_filter_df(df, biz, col="지자체명"):
+    """페이지 내 사업구분 필터 적용"""
+    if biz == "전체" or df.empty or col not in df.columns:
         return df
     def _match(name):
         name_n = str(name).replace(" ", "")
         for k, v in BUSINESS_TYPE_MAP.items():
-            if v == selected_biz:
+            if v == biz:
                 k_n = k.replace(" ", "")
                 if k_n == name_n or k_n in name_n or name_n in k_n:
                     return True
         return False
     return df[df[col].apply(_match)]
+
+def biz_selector(key):
+    """페이지 내 사업구분 선택 위젯"""
+    return st.radio("사업구분 선택", _BIZ_OPTS, horizontal=True,
+                    label_visibility="collapsed", key=f"biz_{key}")
 
 # ============================================================
 # 📑 사업구분별 분석
@@ -2018,6 +2014,8 @@ elif page == "👥 1.회원가입 & 이탈":
 # ============================================================
 elif page == "🖐 2.안부확인":
     st.markdown('<div class="section-header">🖐 안부확인 현황</div>', unsafe_allow_html=True)
+    selected_biz = biz_selector("안부확인")
+    st.divider()
 
     # DB에서 안부확인 raw 데이터 조회
     safety_db = data.get("dashboard_data", {}).get("db_safety_check", pd.DataFrame()) if isinstance(data.get("dashboard_data"), dict) else pd.DataFrame()
@@ -2234,7 +2232,7 @@ elif page == "🖐 2.안부확인":
                 st.plotly_chart(fig_cr, use_container_width=True)
 
             # 지자체별 안부확인율 — C:AK(분모)/AL:BT(분자) 직접 계산 바 차트
-            cr_direct = biz_filter_df(data.get("checkin_mun_rate_direct", pd.DataFrame()))
+            cr_direct = biz_filter_df(data.get("checkin_mun_rate_direct", pd.DataFrame()), selected_biz)
             if not cr_direct.empty and "안부확인율" in cr_direct.columns:
                 latest_date = cr_direct["시작일"].iloc[0] if not cr_direct.empty else str(pd.Timestamp.now().date())
                 latest_cr = cr_direct.copy()
@@ -2507,6 +2505,8 @@ elif page == "🖐 2.안부확인":
 # ============================================================
 elif page == "❤ 6.심혈관체크":
     st.markdown('<div class="section-header">❤ 심혈관체크</div>', unsafe_allow_html=True)
+    selected_biz = biz_selector("심혈관")
+    st.divider()
 
     p_start, p_end = page_week_range_selector("cardio", weeks)
 
@@ -2542,7 +2542,7 @@ elif page == "❤ 6.심혈관체크":
                                        _rc, "전체이용비중", "#FF6F00",
                                        "심혈관체크 이용자수 + 전체이용비중")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
-            mrt_cardio = biz_filter_df(extract_mun_ratio_trend(cardio_user_raw))
+            mrt_cardio = biz_filter_df(extract_mun_ratio_trend(cardio_user_raw), selected_biz)
             if not mrt_cardio.empty:
                 mrt_cardio = filter_by_week_range(mrt_cardio, "주차", p_start, p_end, weeks)
                 _active_c = mrt_cardio.groupby("지자체명")["값"].sum()
@@ -2737,6 +2737,8 @@ elif page == "💊 8.복약관리":
 # ============================================================
 elif page == "📊 3.안부체크율":
     st.markdown('<div class="section-header">📊 안부체크율</div>', unsafe_allow_html=True)
+    selected_biz = biz_selector("안부체크율")
+    st.divider()
 
     # ── 전체 안부체크율(OFF 제외) 추이 — gid=261480368 AB열 ───────────────
     cd_all = data.get("checkin_daily", pd.DataFrame())
@@ -2775,8 +2777,8 @@ elif page == "📊 3.안부체크율":
             st.plotly_chart(fig_ab, use_container_width=True)
             st.markdown("---")
 
-    cr_check_direct = biz_filter_df(data.get("checkin_mun_check_direct", pd.DataFrame()))
-    checkin_rate = biz_filter_df(data.get("checkin_municipality_rate", pd.DataFrame()))
+    cr_check_direct = biz_filter_df(data.get("checkin_mun_check_direct", pd.DataFrame()), selected_biz)
+    checkin_rate = biz_filter_df(data.get("checkin_municipality_rate", pd.DataFrame()), selected_biz)
 
     # 권역별 시계열 탭용 cr 구성 (old data source)
     cr = pd.DataFrame()
@@ -3567,6 +3569,9 @@ elif page == "👤 13.맞고(게스트)":
 # ============================================================
 elif page == "😰 7.스트레스체크":
     st.markdown('<div class="section-header">😰 스트레스체크</div>', unsafe_allow_html=True)
+    selected_biz = biz_selector("스트레스")
+    st.divider()
+
     p_start, p_end = page_week_range_selector("stress", weeks)
 
     tab1, tab2 = st.tabs(["이용자수 추이", "수행횟수 추이"])
@@ -3599,7 +3604,7 @@ elif page == "😰 7.스트레스체크":
                                        _rc, "전체이용비중", "#FF6F00",
                                        "스트레스체크 이용자수 + 전체이용비중")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
-            mrt_stress = biz_filter_df(extract_mun_ratio_trend(stress_user_raw))
+            mrt_stress = biz_filter_df(extract_mun_ratio_trend(stress_user_raw), selected_biz)
             if not mrt_stress.empty:
                 mrt_stress = filter_by_week_range(mrt_stress, "주차", p_start, p_end, weeks)
                 _active_s = mrt_stress.groupby("지자체명")["값"].sum()
