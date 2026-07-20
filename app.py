@@ -1159,6 +1159,22 @@ def biz_selector(key):
     return st.radio("사업구분 선택", opts, horizontal=True,
                     label_visibility="collapsed", key=f"biz_{key}")
 
+def biz_filter_wide_cols(cols, biz):
+    """Wide-format DataFrame의 컬럼 목록에서 선택된 사업구분 소속 지자체 컬럼만 반환.
+    biz == '전체'면 원본 그대로 반환."""
+    if biz == "전체":
+        return cols
+    result = []
+    for col in cols:
+        col_n = str(col).replace("\n", " ").strip().replace(" ", "")
+        for k, v in BUSINESS_TYPE_MAP.items():
+            if v == biz:
+                k_n = k.replace(" ", "")
+                if k_n == col_n or k_n in col_n or col_n in k_n:
+                    result.append(col)
+                    break
+    return result
+
 def biz_agg_raw(df, biz, week_col):
     """사업구분 소속 지자체 이용자수 합산 + 이용비중 계산 → (count_Series, ratio_Series) or (None, None)"""
     if biz == "전체" or df.empty:
@@ -2601,12 +2617,14 @@ elif page == "❤ 6.심혈관체크":
 # ============================================================
 elif page == "💊 8.복약관리":
     st.markdown('<div class="section-header">💊 복약관리</div>', unsafe_allow_html=True)
+    selected_biz = biz_selector("복약관리")
+    st.divider()
     p_start, p_end = page_week_range_selector("med", weeks)
 
     # 데이터 준비
-    med_users = data.get("weekly_복약등록회원", pd.DataFrame())
-    med_count = data.get("weekly_복약등록건수", pd.DataFrame())
-    reg = data.get("registration", pd.DataFrame())
+    med_users = biz_filter_df(data.get("weekly_복약등록회원", pd.DataFrame()), selected_biz)
+    med_count = biz_filter_df(data.get("weekly_복약등록건수", pd.DataFrame()), selected_biz)
+    reg = biz_filter_df(data.get("registration", pd.DataFrame()), selected_biz)
 
     # 전체 가입완료자 수 (비율 계산용)
     total_registered = 0
@@ -2951,6 +2969,8 @@ elif page == "📊 3.안부체크율":
 # ============================================================
 elif page == "🔄 4.안부체크 변경(베이직)":
     st.markdown('<div class="section-header">🔄 안부체크 변경건</div>', unsafe_allow_html=True)
+    selected_biz = biz_selector("안부변경베이직")
+    st.divider()
     st.markdown("""
     <div class="insight-box">
     개인정보가 포함된 데이터입니다.<br>
@@ -3022,6 +3042,10 @@ elif page == "🔄 4.안부체크 변경(베이직)":
                     mun_rate_cols.append(c)
                 elif any(kw in cl for kw in MUNICIPALITY_KEYWORDS) and "KTT" not in cl and "관제" not in cl and "발송" not in cl and "변경률" not in cl:
                     mun_change_cols.append(c)
+
+            # 사업구분 필터: 지자체 컬럼만 선별
+            mun_change_cols = biz_filter_wide_cols(mun_change_cols, selected_biz)
+            mun_rate_cols   = biz_filter_wide_cols(mun_rate_cols, selected_biz)
 
             # 1. 총 안부상태 변경건 + 변경률 추이
             if total_col:
@@ -3126,6 +3150,8 @@ elif page == "🔄 4.안부체크 변경(베이직)":
 # ============================================================
 elif page == "🛡 5.안부체크 변경(세이프)":
     st.markdown('<div class="section-header">🛡 안부체크 변경(세이프) — KT 관제</div>', unsafe_allow_html=True)
+    selected_biz = biz_selector("안부변경세이프")
+    st.divider()
 
     # ── KT 관제 차트 (안부체크횟수 시트에서) ─────────────────────────
     _safe_raw = sheets.get("안부체크횟수", pd.DataFrame())
@@ -3175,6 +3201,9 @@ elif page == "🛡 5.안부체크 변경(세이프)":
                 kt_mgmt_rate_col = _c
             elif "kt출동율" in _cl_low or "kt출동률" in _cl_low:
                 kt_disp_rate_col = _c
+
+        # 사업구분 필터: 지자체별 관제율 컬럼 선별
+        kt_mun_rate_cols = biz_filter_wide_cols(kt_mun_rate_cols, selected_biz)
 
         # KT 관제율 · 출동율 추이
         if kt_mgmt_rate_col or kt_disp_rate_col:
@@ -4192,7 +4221,8 @@ elif page == "🤖 AI 생활지원사":
 # ============================================================
 elif page == "🩺 9.건강상담":
     st.markdown('<div class="section-header">🩺 건강상담</div>', unsafe_allow_html=True)
-
+    selected_biz = biz_selector("건강상담")
+    st.divider()
     p_start, p_end = page_week_range_selector("health", weeks)
 
     health_df = data.get("건강상담", pd.DataFrame())
@@ -4217,7 +4247,7 @@ elif page == "🩺 9.건강상담":
                 if health_df[c].sum() > 0:
                     num_cols.append(c)
 
-        hc_mun = data.get("건강상담지자체", pd.DataFrame())
+        hc_mun = biz_filter_df(data.get("건강상담지자체", pd.DataFrame()), selected_biz, col="지자체")
         tab1, tab2, tab3 = st.tabs(["이용 추이", "지자체별 서비스 현황", "상세 데이터"])
 
         with tab1:
@@ -4512,6 +4542,8 @@ elif page == "💬 10.생활상담":
 # ============================================================
 elif page == "🚶 걸음수":
     st.markdown('<div class="section-header">🚶 걸음수</div>', unsafe_allow_html=True)
+    selected_biz = biz_selector("걸음수")
+    st.divider()
 
     _df_steps_raw = sheets.get("걸음수현황", pd.DataFrame())
 
@@ -4522,6 +4554,7 @@ elif page == "🚶 걸음수":
         st.info("걸음수 데이터가 없습니다.")
     else:
         _df_steps = _df_steps_raw[~_df_steps_raw["agencyName"].isin(_STEPS_EXCLUDE)].copy()
+        _df_steps = biz_filter_df(_df_steps, selected_biz, col="agencyName")
         _df_steps["date"] = pd.to_datetime(_df_steps["date"], errors="coerce")
         _df_steps = _df_steps.dropna(subset=["date"]).sort_values("date")
         _df_steps["memberCnt"]    = _df_steps["memberCnt"].apply(safe_numeric)
