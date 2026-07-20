@@ -729,7 +729,12 @@ def seed_manual_agencies():
 
 
 def seed_safe_agency_status():
-    """세이프 현황 데이터 시드 — 재시작 시 초기화 후 재삽입 (잔여 데이터 방지)"""
+    """세이프 현황 데이터 시드 — 테이블이 완전히 비어있을 때만 실행 (사용자 입력 데이터 보호)"""
+    conn = get_connection()
+    count = conn.execute("SELECT COUNT(*) FROM safe_agency_status").fetchone()[0]
+    conn.close()
+    if count > 0:
+        return  # 데이터 이미 있으면 시드 스킵
     entries = [
         # (monitoring_start_date, memo, agency_name, contract_users, registered_users, joined_users)
         ("2026.01.02",                  "(정식)세이프",                    "강릉시청",             50,  29,  25),
@@ -754,7 +759,6 @@ def seed_safe_agency_status():
         ("2026.06.15",                  "(정식)세이프",                    "연수구청",              30,   3,  27),
     ]
     conn = get_connection()
-    conn.execute("DELETE FROM safe_agency_status")  # 재시작 시 초기화
     for start, memo, name, c_users, r_users, j_users in entries:
         r_rate = round(r_users / c_users * 100, 1) if c_users > 0 else 0
         j_rate = round(j_users / c_users * 100, 1) if c_users > 0 else 0

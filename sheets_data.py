@@ -55,16 +55,18 @@ MUNICIPALITY_KEYWORDS = [
     "양평군청", "정선군청",
     "고성군청", "광주동구청",
     "계양구청", "연수구청", "영월군청", "다살림재가노인지원서비스센터",
+    "세종사회서비스원",
 ]
 
-# 전체 계약 지자체 목록 (신규 포함 28개) — 시트에 없는 경우 0으로 패딩
+# 전체 계약 지자체 목록 (29개) — 시트에 없는 경우 0으로 패딩
 ALL_KNOWN_AGENCIES = [
     "강릉시청", "강원사회서비스원", "경기도청", "경남사회서비스원", "고성군청",
     "광명시청", "광주동구청", "금정구청", "삼척시청", "서귀포시청",
-    "서초구청", "양양군청", "양평군청", "영월군청", "용인시청",
+    "서초구청", "양양군청", "양평군청", "영월군청",
     "용인시청통합돌봄", "음성군청", "정선군청", "제주시청", "증평군청",
     "진천군청", "충남사회서비스원", "충북사회서비스원", "포천시청", "홍천군청",
     "희망나래", "계양구청", "연수구청", "다살림재가노인지원서비스센터",
+    "세종사회서비스원",
 ]
 
 # 이름 별칭 (같은 지자체의 다른 표기)
@@ -823,6 +825,134 @@ def get_app_deletion_data(sheets: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def get_mun_check_rate_direct() -> pd.DataFrame:
+    """안부확인지자체 시트 PH:QJ(29열)에서 지자체별 안부체크율 직접 읽기
+
+    최신 행(마지막 주차)의 값을 반환. 값 형식 "X%"는 safe_numeric으로 처리.
+    Returns: DataFrame [지자체명, 안부체크율]
+    """
+    GID = SHEET_GIDS["안부확인지자체"]
+    url = BASE_URL + GID + "&range=PH:QJ"
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        content = resp.content.decode("utf-8-sig")
+        df = pd.read_csv(io.StringIO(content))
+        df = df.dropna(how="all")
+    except Exception as e:
+        print(f"[sheets_data] get_mun_check_rate_direct error: {e}")
+        return pd.DataFrame()
+
+    if df.empty:
+        return pd.DataFrame()
+
+    header = list(df.columns)
+    latest_row = df.iloc[-1].values
+
+    rows = []
+    for i, col_name in enumerate(header):
+        name_raw = str(col_name).replace("\n", "").replace(" ", "").strip()
+        mun_name = None
+        for kw in MUNICIPALITY_KEYWORDS:
+            if kw in name_raw:
+                mun_name = normalize_agency_name(kw)
+                break
+        if mun_name is None:
+            continue
+        if mun_name not in ALL_KNOWN_AGENCIES:
+            continue
+        rate = safe_numeric(latest_row[i])
+        rows.append({"지자체명": mun_name, "안부체크율": rate})
+
+    # 누락 기관 0으로 패딩
+    found = {r["지자체명"] for r in rows}
+    for agency in ALL_KNOWN_AGENCIES:
+        if agency not in found:
+            rows.append({"지자체명": agency, "안부체크율": 0.0})
+
+    return pd.DataFrame(rows)
+
+
+def get_checkin_mun_rate_direct() -> pd.DataFrame:
+    """안부확인지자체 시트 C:AK(분모)/AL:BT(분자)를 직접 읽어 지자체별 안부확인율 계산
+
+    gviz range=A:BT로 72열만 fetch → 위치 기반 접근 (열 이름 무관)
+    Returns: DataFrame [지자체명, 분모, 분자, 안부확인율, 시작일]
+    """
+    GID = SHEET_GIDS["안부확인지자체"]
+    url = BASE_URL + GID + "&range=A:BT"
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        content = resp.content.decode("utf-8-sig")
+        df = pd.read_csv(io.StringIO(content))
+        df = df.dropna(how="all")
+    except Exception as e:
+        print(f"[sheets_data] get_checkin_mun_rate_direct error: {e}")
+        return pd.DataFrame()
+
+    if df.empty or len(df.columns) < 72:
+        return pd.DataFrame()
+
+    header = list(df.columns)  # 72개 컬럼명 (row1 값 = 지자체명/blank)
+
+    # C~L (분모 위치 2-11): 헤더 없는 첫 10개 기관 — 순서 하드코딩
+    UNLABELED_NAMES = [
+        "경기도청", "용인시청", "서초구청", "진천군청", "음성군청",
+        "강북구청", "금정구청", "괴산군청", "증평군청", "포천시청",
+    ]
+
+    # 최신 유효 날짜 행 (YYYY-MM-DD 형식)
+    date_series = df.iloc[:, 0].astype(str).str.strip()
+    valid_mask = date_series.str.match(r"\d{4}-\d{2}-\d{2}")
+    valid_df = df[valid_mask]
+    if valid_df.empty:
+        return pd.DataFrame()
+
+    latest_date = valid_df.iloc[-1, 0]
+    latest_vals = valid_df.iloc[-1].values  # numpy array, 위치 기반
+
+    rows = []
+
+    # ① C~L (위치 2-11) 분모 / AL~AU (위치 37-46) 분자
+    for i, name in enumerate(UNLABELED_NAMES):
+        if name not in ALL_KNOWN_AGENCIES:
+            continue
+        denom = safe_numeric(latest_vals[2 + i])
+        numer = safe_numeric(latest_vals[37 + i])
+        rate = round(numer / denom * 100, 1) if denom > 0 else 0.0
+        rows.append({"지자체명": name, "분모": int(denom), "분자": int(numer),
+                     "안부확인율": rate, "시작일": str(latest_date)})
+
+    # ② M~AK (위치 12-36) 분모 / AV~BT (위치 47-71) 분자 (헤더에 지자체명)
+    for i in range(25):
+        col_label = str(header[12 + i]).replace("\n", "").replace(" ", "").strip()
+        # 지자체명 추출: MUNICIPALITY_KEYWORDS 매칭
+        mun_name = None
+        for kw in MUNICIPALITY_KEYWORDS:
+            if kw in col_label:
+                mun_name = normalize_agency_name(kw)
+                break
+        if mun_name is None:
+            mun_name = normalize_agency_name(col_label)
+        if mun_name not in ALL_KNOWN_AGENCIES:
+            continue
+        denom = safe_numeric(latest_vals[12 + i])
+        numer = safe_numeric(latest_vals[47 + i])
+        rate = round(numer / denom * 100, 1) if denom > 0 else 0.0
+        rows.append({"지자체명": mun_name, "분모": int(denom), "분자": int(numer),
+                     "안부확인율": rate, "시작일": str(latest_date)})
+
+    # ③ ALL_KNOWN_AGENCIES에서 누락된 기관 → 0으로 패딩
+    found = {r["지자체명"] for r in rows}
+    for agency in ALL_KNOWN_AGENCIES:
+        if agency not in found:
+            rows.append({"지자체명": agency, "분모": 0, "분자": 0,
+                         "안부확인율": 0.0, "시작일": str(latest_date)})
+
+    return pd.DataFrame(rows)
+
+
 def get_checkin_municipality_rate(sheets: dict) -> pd.DataFrame:
     """안부확인지자체 시트에서 지자체별 안부체크율 추출 (off 대상자 반영)
 
@@ -990,6 +1120,12 @@ def build_dashboard_data(sheets: dict) -> dict:
 
     # 3-1. 지자체별 안부체크율 (안부확인지자체 시트의 수식 결과)
     result["checkin_municipality_rate"] = get_checkin_municipality_rate(sheets)
+
+    # 3-2. 지자체별 안부확인율 (C:AK 분모 / AL:BT 분자 직접 계산)
+    result["checkin_mun_rate_direct"] = get_checkin_mun_rate_direct()
+
+    # 3-3. 지자체별 안부체크율 (PH:QJ 직접 계산)
+    result["checkin_mun_check_direct"] = get_mun_check_rate_direct()
 
     # 4. 지자체별 주간 데이터 (여러 시트)
     for key, label in [

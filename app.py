@@ -28,7 +28,7 @@ from sheets_data import (
     build_dashboard_data, build_municipality_heatmap_data,
     get_week_summary, get_weekly_municipality_data,
     safe_numeric, find_municipality_columns, extract_municipality_name,
-    REGION_MAP, MUNICIPALITY_KEYWORDS,
+    REGION_MAP, MUNICIPALITY_KEYWORDS, ALL_KNOWN_AGENCIES,
 )
 from unified_data import (
     load_unified_data, get_agency_master, save_agency,
@@ -573,6 +573,7 @@ with st.sidebar:
         "페이지 선택",
         [
             "📋 Summary",
+            "📑 사업구분별",
             "👥 1.회원가입 & 이탈",
             "🖐 2.안부확인",
             "📊 3.안부체크율",
@@ -732,6 +733,38 @@ REGION_COLORS = {
     "서울권": "#2F5496", "경기권": "#00897B", "충청권": "#E65100",
     "영남권": "#6A1B9A", "강원권": "#00838F", "호남권": "#558B2F",
     "제주권": "#AD1457", "인천권": "#1A237E", "기타": "#757575",
+}
+
+# 사업구분 매핑 (지자체명 → 사업구분)
+BUSINESS_TYPE_MAP = {
+    # 통합돌봄
+    "진천군청": "통합돌봄", "음성군청": "통합돌봄", "증평군청": "통합돌봄",
+    "충북사회서비스원": "통합돌봄", "양양군청": "통합돌봄", "양평군청": "통합돌봄",
+    "정선군청": "통합돌봄", "고성군청": "통합돌봄", "용인시청통합돌봄": "통합돌봄",
+    "용인시청": "통합돌봄", "광주동구청": "통합돌봄", "연수구청": "통합돌봄",
+    "계양구청": "통합돌봄", "영월군청": "통합돌봄", "동해시청": "통합돌봄",
+    "세종사회서비스원": "통합돌봄",
+    # 노인맞춤돌봄
+    "독거노인종합지원센터": "노인맞춤돌봄", "서초구청": "노인맞춤돌봄",
+    "포천시청": "노인맞춤돌봄", "홍천군청": "노인맞춤돌봄", "경기도청": "노인맞춤돌봄",
+    "경남사회서비스원": "노인맞춤돌봄", "강북구청": "노인맞춤돌봄",
+    "다살림재가노인지원서비스센터": "노인맞춤돌봄",
+    # 고독사예방
+    "강릉시청": "고독사예방", "금정구청": "고독사예방", "삼척시청": "고독사예방",
+    "광명시청": "고독사예방", "제주시청": "고독사예방", "서귀포시청": "고독사예방",
+    # 취약지지원
+    "충남사회서비스원": "취약지지원",
+    # 장애인지원
+    "희망나래": "장애인지원", "희망나래장애인복지관": "장애인지원",
+    # 퇴원환자지원
+    "인천사회서비스원": "퇴원환자지원",
+    # 기타
+    "강원사회서비스원": "기타",
+}
+BUSINESS_TYPE_ORDER = ["통합돌봄", "노인맞춤돌봄", "고독사예방", "취약지지원", "장애인지원", "퇴원환자지원", "기타"]
+BUSINESS_TYPE_COLORS = {
+    "통합돌봄": "#1565C0", "노인맞춤돌봄": "#2E7D32", "고독사예방": "#C62828",
+    "취약지지원": "#E65100", "장애인지원": "#6A1B9A", "퇴원환자지원": "#00695C", "기타": "#757575",
 }
 
 # 지자체별 고유 색상 (20개+ 명확히 구분되는 색 — 권역 내에서도 차별화)
@@ -1058,7 +1091,222 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
 # ============================================================
 # 📋 Summary 페이지
 # ============================================================
-if page == "📋 Summary":
+# ============================================================
+# 📑 사업구분별 분석
+# ============================================================
+if page == "📑 사업구분별":
+    st.markdown('<div class="section-header">📑 사업구분별 서비스 이용 현황</div>', unsafe_allow_html=True)
+
+    # ── 데이터 준비 ────────────────────────────────────────────
+    cr_check = data.get("checkin_mun_check_direct", pd.DataFrame())    # 안부체크율
+    cr_rate  = data.get("checkin_mun_rate_direct",  pd.DataFrame())    # 안부확인율
+    reg_df   = data.get("registration", pd.DataFrame())                # 이용자 현황
+
+    def _biz(name):
+        """지자체명 → 사업구분 (부분 매칭 포함)"""
+        name_n = str(name).replace(" ", "")
+        for k, v in BUSINESS_TYPE_MAP.items():
+            if name_n == k.replace(" ", "") or k.replace(" ", "") in name_n or name_n in k.replace(" ", ""):
+                return v
+        return "기타"
+
+    # 이용자수(협약인원) by 지자체
+    reg_map = {}
+    if not reg_df.empty and "지자체명" in reg_df.columns and "협약인원" in reg_df.columns:
+        for _, row in reg_df.iterrows():
+            nm = str(row["지자체명"]).strip()
+            reg_map[nm] = safe_numeric(row.get("협약인원", 0))
+
+    # 사업구분 집계 함수
+    def agg_by_biz(df, val_col, label):
+        if df.empty or val_col not in df.columns or "지자체명" not in df.columns:
+            return pd.DataFrame()
+        tmp = df.copy()
+        tmp["사업구분"] = tmp["지자체명"].apply(_biz)
+        tmp[val_col] = tmp[val_col].apply(safe_numeric)
+        tmp = tmp[tmp[val_col] > 0]
+        grp = tmp.groupby("사업구분")[val_col].mean().reset_index()
+        grp.columns = ["사업구분", label]
+        grp[label] = grp[label].round(1)
+        return grp
+
+    biz_check = agg_by_biz(cr_check, "안부체크율", "안부체크율")
+    biz_rate  = agg_by_biz(cr_rate,  "안부확인율", "안부확인율")
+
+    # 사업구분별 지자체 목록 및 이용자 수
+    all_agencies_biz = {}
+    for nm in list(reg_map.keys()) + list(BUSINESS_TYPE_MAP.keys()):
+        biz = _biz(nm)
+        if biz not in all_agencies_biz:
+            all_agencies_biz[biz] = {"count": 0, "users": 0, "names": []}
+    if not reg_df.empty and "지자체명" in reg_df.columns:
+        for _, row in reg_df.iterrows():
+            nm = str(row["지자체명"]).strip()
+            biz = _biz(nm)
+            if biz not in all_agencies_biz:
+                all_agencies_biz[biz] = {"count": 0, "users": 0, "names": []}
+            all_agencies_biz[biz]["count"] += 1
+            all_agencies_biz[biz]["users"] += int(safe_numeric(row.get("협약인원", 0)))
+            if nm not in all_agencies_biz[biz]["names"]:
+                all_agencies_biz[biz]["names"].append(nm)
+
+    # ── KPI 카드 ──────────────────────────────────────────────
+    st.markdown("#### 사업구분별 지자체 / 이용자 수")
+    ordered_biz = [b for b in BUSINESS_TYPE_ORDER if b in all_agencies_biz]
+    cols = st.columns(len(ordered_biz))
+    for col, biz in zip(cols, ordered_biz):
+        info = all_agencies_biz[biz]
+        color = BUSINESS_TYPE_COLORS.get(biz, "#666")
+        col.markdown(
+            f"""<div style="background:#fff;border:2px solid {color};border-radius:14px;
+            padding:14px 12px;text-align:center">
+            <div style="font-size:12px;font-weight:700;color:{color}">{biz}</div>
+            <div style="font-size:24px;font-weight:800;color:#1e2533">{info['count']}</div>
+            <div style="font-size:11px;color:#6b7488">지자체</div>
+            <div style="font-size:16px;font-weight:700;color:{color}">{info['users']:,}</div>
+            <div style="font-size:11px;color:#6b7488">이용자(협약)</div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # ── 지자체 상세 목록 ──────────────────────────────────────
+    with st.expander("📋 사업구분별 지자체 목록", expanded=False):
+        for biz in ordered_biz:
+            if biz in all_agencies_biz:
+                names = all_agencies_biz[biz]["names"]
+                color = BUSINESS_TYPE_COLORS.get(biz, "#666")
+                st.markdown(
+                    f"**<span style='color:{color}'>{biz}</span>** ({len(names)}개): "
+                    + " · ".join(names),
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown("---")
+
+    # ── 데이터 맵 준비 ─────────────────────────────────────────
+    _check_map = {}
+    _rate_map  = {}
+    if not cr_check.empty and "지자체명" in cr_check.columns:
+        for _, row in cr_check.iterrows():
+            _check_map[str(row["지자체명"]).strip()] = safe_numeric(row.get("안부체크율", 0))
+    if not cr_rate.empty and "지자체명" in cr_rate.columns:
+        for _, row in cr_rate.iterrows():
+            _rate_map[str(row["지자체명"]).strip()] = safe_numeric(row.get("안부확인율", 0))
+
+    def _extract_mun_snap(sheet_key):
+        raw = sheets.get(sheet_key, pd.DataFrame())
+        if raw.empty:
+            return {}
+        mrt = extract_mun_ratio_trend(raw)
+        if mrt.empty or "주차" not in mrt.columns:
+            return {}
+        wk = selected_week if selected_week in mrt["주차"].values else mrt["주차"].dropna().max()
+        snap = mrt[mrt["주차"] == wk]
+        if snap.empty:
+            snap = mrt[mrt["주차"] == mrt["주차"].max()]
+        return dict(zip(snap["지자체명"], snap["값"].apply(safe_numeric)))
+
+    _cardio_map = _extract_mun_snap("심혈관이용자")
+    _stress_map = _extract_mun_snap("스트레스이용자")
+
+    # ── 전체 지자체 데이터프레임 구성 ─────────────────────────
+    all_names = []
+    for biz in BUSINESS_TYPE_ORDER:
+        if biz in all_agencies_biz:
+            all_names.extend(all_agencies_biz[biz]["names"])
+
+    all_rows = []
+    for nm in all_names:
+        all_rows.append({
+            "지자체":      nm,
+            "사업구분":    _biz(nm),
+            "이용자(협약)": int(reg_map.get(nm, 0)),
+            "안부체크율":   _check_map.get(nm, 0),
+            "안부확인율":   _rate_map.get(nm, 0),
+            "심혈관이용비중": _cardio_map.get(nm, 0),
+            "스트레스이용비중": _stress_map.get(nm, 0),
+        })
+    df_all = pd.DataFrame(all_rows)
+
+    H_PER_MUN = 38
+
+    # ── 사업구분별 섹션 (스크롤) ───────────────────────────────
+    st.markdown(f"#### {selected_week} 주차 기준 — 사업구분별 지자체 현황")
+
+    for biz in BUSINESS_TYPE_ORDER:
+        if biz not in all_agencies_biz:
+            continue
+        names = all_agencies_biz[biz]["names"]
+        if not names:
+            continue
+
+        color = BUSINESS_TYPE_COLORS.get(biz, "#888")
+        df_biz = df_all[df_all["사업구분"] == biz].copy()
+        if df_biz.empty:
+            continue
+
+        # 섹션 헤더
+        st.markdown(
+            f"<h5 style='margin:28px 0 8px;padding:8px 14px;"
+            f"border-left:5px solid {color};background:{color}18;"
+            f"border-radius:4px;color:{color}'>{biz} ({len(names)}개 지자체)</h5>",
+            unsafe_allow_html=True,
+        )
+
+        # 2열: 안부체크율 | 안부확인율
+        c1, c2 = st.columns(2)
+        h = max(200, len(names) * 36 + 60)
+
+        def _biz_hbar(df_in, col, title, clr, height, container):
+            df_s = df_in[df_in[col] > 0].sort_values(col, ascending=True)
+            if df_s.empty:
+                container.caption(f"{title}: 데이터 없음")
+                return
+            fig = px.bar(
+                df_s, x=col, y="지자체", orientation="h",
+                text=col, height=height, title=title,
+                color_discrete_sequence=[clr],
+            )
+            fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+            fig.update_layout(
+                showlegend=False,
+                margin=dict(t=36, b=4, l=4, r=60),
+                xaxis=dict(range=[0, 108]),
+                xaxis_title="", yaxis_title="",
+            )
+            container.plotly_chart(fig, use_container_width=True)
+
+        _biz_hbar(df_biz, "안부체크율",   "📊 안부체크율 (%)",   color, h, c1)
+        _biz_hbar(df_biz, "안부확인율",   "✅ 안부확인율 (%)",   color, h, c2)
+
+        # 2열: 심혈관 | 스트레스
+        c3, c4 = st.columns(2)
+        _biz_hbar(df_biz, "심혈관이용비중",  "❤ 심혈관 이용자비중 (%)",   color, h, c3)
+        _biz_hbar(df_biz, "스트레스이용비중", "😰 스트레스 이용자비중 (%)", color, h, c4)
+
+        # 수치 테이블
+        df_tbl = df_biz[["지자체", "이용자(협약)", "안부체크율", "안부확인율", "심혈관이용비중", "스트레스이용비중"]].rename(columns={
+            "안부체크율": "안부체크율(%)", "안부확인율": "안부확인율(%)",
+            "심혈관이용비중": "심혈관(%)", "스트레스이용비중": "스트레스(%)",
+        })
+        st.dataframe(
+            df_tbl,
+            use_container_width=True,
+            hide_index=True,
+            height=(len(names) + 1) * 36 + 4,
+            column_config={
+                "안부체크율(%)": st.column_config.NumberColumn(format="%.1f%%"),
+                "안부확인율(%)": st.column_config.NumberColumn(format="%.1f%%"),
+                "심혈관(%)":    st.column_config.NumberColumn(format="%.1f%%"),
+                "스트레스(%)":  st.column_config.NumberColumn(format="%.1f%%"),
+                "이용자(협약)": st.column_config.NumberColumn(format="%d명"),
+            },
+        )
+        st.markdown("<hr style='margin:4px 0 0'>", unsafe_allow_html=True)
+
+elif page == "📋 Summary":
     if selected_week:
         summary = cached_week_summary(sheets, data, selected_week)
         prev_week = get_prev_week(selected_week)
@@ -1219,13 +1467,17 @@ if page == "📋 Summary":
                             model = MODEL_KR.get(r.get("service_model", ""), r.get("service_model", ""))
                             users = int(r.get("target_users", 0))
                             users_str = f" ({users}명)" if users > 0 else " (규모 미정)"
-                            st.markdown(f'<div class="insight-box-success">{r["contract_start"]} {r["agency_name"]} {model} 계약 시작{users_str}</div>', unsafe_allow_html=True)
+                            memo = str(r.get("memo", "")).strip()
+                            memo_tag = f' &nbsp;<span style="color:#f59e0b;font-size:0.8em">⚠ {memo}</span>' if memo else ""
+                            st.markdown(f'<div class="insight-box-success">{r["contract_start"]} {r["agency_name"]} {model} 계약 시작{users_str}{memo_tag}</div>', unsafe_allow_html=True)
                     if not starting_soon.empty:
                         for _, r in starting_soon.iterrows():
                             model = MODEL_KR.get(r.get("service_model", ""), r.get("service_model", ""))
                             users = int(r.get("target_users", 0))
                             users_str = f" ({users}명)" if users > 0 else " (규모 미정)"
-                            st.markdown(f'<div class="insight-box">{r["contract_start"]} {r["agency_name"]} {model} 계약 시작 예정{users_str}</div>', unsafe_allow_html=True)
+                            memo = str(r.get("memo", "")).strip()
+                            memo_tag = f' &nbsp;<span style="color:#f59e0b;font-size:0.8em">⚠ {memo}</span>' if memo else ""
+                            st.markdown(f'<div class="insight-box">{r["contract_start"]} {r["agency_name"]} {model} 계약 시작 예정{users_str}{memo_tag}</div>', unsafe_allow_html=True)
                     if recently_started.empty and starting_soon.empty:
                         st.markdown('<div class="insight-box">최근 4주 내 계약 시작 없음</div>', unsafe_allow_html=True)
 
@@ -1245,6 +1497,26 @@ if page == "📋 Summary":
                             st.markdown(f'<div class="insight-box-danger">{r["contract_end"]} {r["agency_name"]} {model} 계약 종료</div>', unsafe_allow_html=True)
                     if ending_soon.empty and recently_ended.empty:
                         st.markdown('<div class="insight-box">최근 4주 내 계약 종료 없음</div>', unsafe_allow_html=True)
+
+                # 4주 이후 계약 예정 (memo에 "계약 예정" 포함 or contract_start > four_weeks_later)
+                upcoming_planned = agencies_df[
+                    (agencies_df["contract_start"] > four_weeks_later) &
+                    (agencies_df["contract_start"] != "")
+                ].copy().sort_values("contract_start")
+                if not upcoming_planned.empty:
+                    st.markdown("**🗓 계약 예정 (4주 이후)**")
+                    for _, r in upcoming_planned.iterrows():
+                        model = MODEL_KR.get(r.get("service_model", ""), r.get("service_model", ""))
+                        users = int(r.get("target_users", 0))
+                        users_str = f" · {users}명" if users > 0 else ""
+                        memo = str(r.get("memo", ""))
+                        memo_str = f" ({memo})" if memo else ""
+                        st.markdown(
+                            f'<div class="insight-box" style="border-left:4px solid #7C3AED;">'
+                            f'📌 {r["contract_start"]} &nbsp;{r["agency_name"]} &nbsp;{model}{users_str}{memo_str}'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
 
             st.markdown("")
 
@@ -1934,40 +2206,40 @@ elif page == "🖐 2.안부확인":
                 )
                 st.plotly_chart(fig_cr, use_container_width=True)
 
-            # 지자체별 안부확인율 — 최신 주차 기준 가로 바 차트 (3.안부체크율 동일 방식)
-            cr_mun = data.get("checkin_municipality_rate", pd.DataFrame())
-            if not cr_mun.empty and "안부확인율" in cr_mun.columns:
-                cr_show = cr_mun[cr_mun["안부확인율"].notna() & (cr_mun["안부확인율"] > 0)].copy()
-                cr_show["안부확인율"] = cr_show["안부확인율"].round(1)
-                cr_show = cr_show.sort_values("시작일")
-                if not cr_show.empty:
-                    latest_date = cr_show["시작일"].max()
-                    latest_cr = cr_show[cr_show["시작일"] == latest_date].copy()
-                    latest_cr = latest_cr.drop_duplicates(subset="지자체명", keep="last")
-                    latest_cr["권역"] = latest_cr["지자체명"].map(DETAIL_REGION).fillna("기타")
-                    latest_cr = latest_cr.sort_values("안부확인율", ascending=True).copy()
-                    latest_cr["지자체명"] = latest_cr["지자체명"].apply(_mun_label)
+            # 지자체별 안부확인율 — C:AK(분모)/AL:BT(분자) 직접 계산 바 차트
+            cr_direct = data.get("checkin_mun_rate_direct", pd.DataFrame())
+            if not cr_direct.empty and "안부확인율" in cr_direct.columns:
+                latest_date = cr_direct["시작일"].iloc[0] if not cr_direct.empty else str(pd.Timestamp.now().date())
+                latest_cr = cr_direct.copy()
+                latest_cr["권역"] = latest_cr["지자체명"].map(DETAIL_REGION).fillna("기타")
+                latest_cr = latest_cr.sort_values("안부확인율", ascending=True).copy()
+                latest_cr["지자체명_표시"] = latest_cr["지자체명"].apply(_mun_label)
 
-                    st.markdown(f"**{latest_date} 기준**")
-                    fig_mun = px.bar(
-                        latest_cr, y="지자체명", x="안부확인율", orientation="h",
-                        color="권역", color_discrete_map=REGION_COLORS,
-                        height=min(520, max(320, len(latest_cr) * 22)),
-                    )
-                    fig_mun.update_layout(
-                        title=f"지자체별 안부확인율 ({latest_date})",
-                        legend=LEGEND_BELOW, margin=dict(t=40, b=70),
-                        xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
-                        yaxis=dict(tickfont=dict(size=11)),
-                    )
-                    fig_mun.update_traces(
-                        texttemplate="%{x:.1f}%", textposition="outside",
-                        textfont=dict(size=12),
-                        hovertemplate="<b>%{y}</b><br>안부확인율: %{x:.1f}%<extra></extra>",
-                    )
-                    st.plotly_chart(fig_mun, use_container_width=True)
-                else:
-                    st.info("안부확인율 데이터가 없습니다.")
+                st.markdown(f"**{latest_date} 기준**  |  분모: C~AK열, 분자: AL~BT열")
+                fig_mun = px.bar(
+                    latest_cr, y="지자체명_표시", x="안부확인율", orientation="h",
+                    color="권역", color_discrete_map=REGION_COLORS,
+                    custom_data=["분자", "분모"],
+                    height=min(800, max(480, len(latest_cr) * 26)),
+                )
+                fig_mun.update_layout(
+                    title=f"지자체별 안부확인율 ({latest_date})",
+                    legend=LEGEND_BELOW, margin=dict(t=40, b=70),
+                    xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
+                    yaxis=dict(tickfont=dict(size=11)),
+                )
+                fig_mun.update_traces(
+                    texttemplate="%{x:.1f}%", textposition="outside",
+                    textfont=dict(size=12),
+                    hovertemplate=(
+                        "<b>%{y}</b><br>"
+                        "안부확인율: %{x:.1f}%<br>"
+                        "분자(안부확인): %{customdata[0]:,}명<br>"
+                        "분모(전체발송): %{customdata[1]:,}명"
+                        "<extra></extra>"
+                    ),
+                )
+                st.plotly_chart(fig_mun, use_container_width=True)
             else:
                 st.info("지자체별 안부확인율 데이터가 없습니다. (안부확인지자체 시트 확인 필요)")
 
@@ -2168,38 +2440,39 @@ elif page == "🖐 2.안부확인":
         else:
             st.info("안부확인 데이터가 없습니다. ('안부확인전체' 시트 R열 안부미확인률 필요)")
 
-        # ② 지자체별 안부확인율 — 최신 주차 바 차트
-        cr_base = data.get("checkin_municipality_rate", pd.DataFrame())
-        if not cr_base.empty and "안부확인율" in cr_base.columns:
-            cr_all = cr_base[cr_base["안부확인율"].notna() & (cr_base["안부확인율"] > 0)].copy()
-            cr_all["안부확인율"] = cr_all["안부확인율"].round(1)
-            cr_all = cr_all.sort_values("시작일")
-            cr_all = week_label_df(cr_all, "시작일")
-            if not cr_all.empty:
-                latest_date2 = cr_all["시작일"].max()
-                latest_cr2 = cr_all[cr_all["시작일"] == latest_date2].copy()
-                latest_cr2 = latest_cr2.drop_duplicates(subset="지자체명", keep="last")
-                latest_cr2["권역"] = latest_cr2["지자체명"].map(DETAIL_REGION).fillna("기타")
-                latest_cr2 = latest_cr2.sort_values("안부확인율", ascending=True).copy()
-                latest_cr2["지자체명"] = latest_cr2["지자체명"].apply(_mun_label)
-                st.markdown(f"**{latest_date2} 기준**")
-                fig2 = px.bar(
-                    latest_cr2, y="지자체명", x="안부확인율", orientation="h",
-                    color="권역", color_discrete_map=REGION_COLORS,
-                    height=min(520, max(320, len(latest_cr2) * 22)),
-                )
-                fig2.update_layout(
-                    title=f"지자체별 안부확인율 ({latest_date2})",
-                    legend=LEGEND_BELOW, margin=dict(t=40, b=70),
-                    xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
-                    yaxis=dict(tickfont=dict(size=11)),
-                )
-                fig2.update_traces(
-                    texttemplate="%{x:.1f}%", textposition="outside",
-                    textfont=dict(size=12),
-                    hovertemplate="<b>%{y}</b><br>안부확인율: %{x:.1f}%<extra></extra>",
-                )
-                st.plotly_chart(fig2, use_container_width=True)
+        # ② 지자체별 안부확인율 — C:AK/AL:BT 직접 계산 바 차트
+        cr_direct2 = data.get("checkin_mun_rate_direct", pd.DataFrame())
+        if not cr_direct2.empty and "안부확인율" in cr_direct2.columns:
+            latest_date2 = cr_direct2["시작일"].iloc[0]
+            latest_cr2 = cr_direct2.copy()
+            latest_cr2["권역"] = latest_cr2["지자체명"].map(DETAIL_REGION).fillna("기타")
+            latest_cr2 = latest_cr2.sort_values("안부확인율", ascending=True).copy()
+            latest_cr2["지자체명_표시"] = latest_cr2["지자체명"].apply(_mun_label)
+            st.markdown(f"**{latest_date2} 기준**  |  분모: C~AK열, 분자: AL~BT열")
+            fig2 = px.bar(
+                latest_cr2, y="지자체명_표시", x="안부확인율", orientation="h",
+                color="권역", color_discrete_map=REGION_COLORS,
+                custom_data=["분자", "분모"],
+                height=min(520, max(320, len(latest_cr2) * 22)),
+            )
+            fig2.update_layout(
+                title=f"지자체별 안부확인율 ({latest_date2})",
+                legend=LEGEND_BELOW, margin=dict(t=40, b=70),
+                xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
+                yaxis=dict(tickfont=dict(size=11)),
+            )
+            fig2.update_traces(
+                texttemplate="%{x:.1f}%", textposition="outside",
+                textfont=dict(size=12),
+                hovertemplate=(
+                    "<b>%{y}</b><br>"
+                    "안부확인율: %{x:.1f}%<br>"
+                    "분자(안부확인): %{customdata[0]:,}명<br>"
+                    "분모(전체발송): %{customdata[1]:,}명"
+                    "<extra></extra>"
+                ),
+            )
+            st.plotly_chart(fig2, use_container_width=True)
 
 
 # ============================================================
@@ -2475,8 +2748,12 @@ elif page == "📊 3.안부체크율":
             st.plotly_chart(fig_ab, use_container_width=True)
             st.markdown("---")
 
+    cr_check_direct = data.get("checkin_mun_check_direct", pd.DataFrame())
     checkin_rate = data.get("checkin_municipality_rate", pd.DataFrame())
 
+    # 권역별 시계열 탭용 cr 구성 (old data source)
+    cr = pd.DataFrame()
+    regions = []
     if not checkin_rate.empty and "안부체크율" in checkin_rate.columns:
         cr = checkin_rate[checkin_rate["안부체크율"].notna()].copy()
         cr["권역"] = cr["지자체명"].map(DETAIL_REGION).fillna("기타")
@@ -2495,24 +2772,18 @@ elif page == "📊 3.안부체크율":
                 cr_date_end = st.selectbox("종료일", end_options, index=len(end_options)-1, key="cr_date_end")
             st.caption(f"선택 기간: {cr_date_start} ~ {cr_date_end}")
 
-        # 기간 필터 적용 (날짜 원본으로 필터링 후, 시간순 정렬 → 주차 레이블 변환)
         cr = cr[(cr["시작일"] >= cr_date_start) & (cr["시작일"] <= cr_date_end)]
         cr["_week_key"] = cr["시작일"].apply(date_to_week_label)
-        # ── 일별 → 주차 단위 중복 제거 ──
-        # MZ~NW 시트 원본값(안부체크율_원본)이 있는 행(토요일)을 우선 보존.
-        # ISO 주차는 월~일이라 토요일이 마지막이 아닐 수 있으므로,
-        # _has_orig(원본 있음=1) 기준으로 정렬 후 keep="last" → 원본값 행이 선택됨.
         if "안부체크율_원본" in cr.columns:
             cr["_has_orig"] = cr["안부체크율_원본"].fillna(0).gt(0).astype(int)
         else:
             cr["_has_orig"] = 0
-        cr = cr.sort_values(["_has_orig", "시작일"])  # 원본 있는 행이 뒤로 → keep="last" 선택
+        cr = cr.sort_values(["_has_orig", "시작일"])
         cr = cr.drop_duplicates(subset=["_week_key", "지자체명"], keep="last")
         cr = cr.drop(columns=["_week_key", "_has_orig"])
         cr = cr.sort_values("시작일")
         cr = week_label_df(cr, "시작일")
 
-        # 현재 활성 지자체만 필터링 — 이용자현황 시트 기준 24개
         _reg_df = data.get("registration", pd.DataFrame())
         _active_from_reg = []
         if not _reg_df.empty and "지자체명" in _reg_df.columns:
@@ -2520,7 +2791,6 @@ elif page == "📊 3.안부체크율":
 
         if _active_from_reg:
             def _match_active_reg(name):
-                """공백 제거 후 부분 매칭 (예: '용인시청통합돌봄' ↔ '용인시청 통합돌봄')"""
                 name_n = str(name).replace(" ", "")
                 for a in _active_from_reg:
                     a_n = str(a).replace(" ", "")
@@ -2530,39 +2800,39 @@ elif page == "📊 3.안부체크율":
             cr = cr[cr["지자체명"].apply(_match_active_reg)]
 
         regions = sorted(cr["권역"].unique())
-        tab_labels = ["전체 비교"] + regions
-        tabs = st.tabs(tab_labels)
 
-        # 전체 비교 탭
-        with tabs[0]:
-            if selected_week:
-                dates = list(dict.fromkeys(cr["시작일"].tolist()))  # 시간순 정렬 보존
-                if dates:
-                    latest_date = dates[-1]
-                    latest_data = cr[cr["시작일"] == latest_date].copy()
-                    # 같은 주차 내 동일 지자체 중복 제거 (가장 최근 원본 날짜 기준 마지막 행 유지)
-                    latest_data = latest_data.drop_duplicates(subset="지자체명", keep="last")
-                    latest_data = latest_data.sort_values("안부체크율", ascending=True).copy()
-                    latest_data["지자체명"] = latest_data["지자체명"].apply(_mun_label)
+    # 탭 구성 — 전체 비교는 항상 표시 (PH:QJ 직접 데이터)
+    tab_labels = ["전체 비교"] + regions
+    tabs = st.tabs(tab_labels)
 
-                    st.markdown(f"**{latest_date} 기준**")
+    # 전체 비교 탭 — PH:QJ 직접 데이터 사용 (29개 지자체)
+    with tabs[0]:
+        if not cr_check_direct.empty and "안부체크율" in cr_check_direct.columns:
+            latest_snap = cr_check_direct.copy()
+            latest_snap["권역"] = latest_snap["지자체명"].map(DETAIL_REGION).fillna("기타")
+            latest_snap = latest_snap.sort_values("안부체크율", ascending=True).copy()
+            latest_snap["지자체명_표시"] = latest_snap["지자체명"].apply(_mun_label)
+            st.markdown(f"**{selected_week} 기준 — 전체 {len(latest_snap)}개 지자체**")
+            fig = px.bar(latest_snap, y="지자체명_표시", x="안부체크율", orientation="h",
+                         color="권역", color_discrete_map=REGION_COLORS,
+                         height=min(600, max(400, len(latest_snap) * 22)))
+            fig.update_layout(
+                title=f"지자체별 안부체크율 ({selected_week})",
+                legend=LEGEND_BELOW, margin=dict(t=40, b=70),
+                xaxis=dict(range=[0, 105]),
+                yaxis=dict(tickfont=dict(size=11)),
+            )
+            fig.update_traces(
+                texttemplate="%{x:.1f}%", textposition="outside",
+                textfont=dict(size=12),
+                hovertemplate="<b>%{y}</b><br>안부체크율: %{x:.1f}%<extra></extra>",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("안부체크율 데이터 없음 (🔄 데이터 새로고침 후 다시 시도)")
 
-                    fig = px.bar(latest_data, y="지자체명", x="안부체크율", orientation="h",
-                                 color="권역", color_discrete_map=REGION_COLORS,
-                                 height=min(520, max(320, len(latest_data) * 22)))
-                    fig.update_layout(
-                        title=f"지자체별 안부체크율 ({latest_date})",
-                        legend=LEGEND_BELOW, margin=dict(t=40, b=70),
-                        xaxis=dict(range=[0, 105]),
-                        yaxis=dict(tickfont=dict(size=11)),
-                    )
-                    fig.update_traces(
-                        texttemplate="%{x:.1f}%", textposition="outside",
-                        textfont=dict(size=12),
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-
-        # 권역별 탭
+    # 권역별 탭 (시계열 데이터 있을 때만)
+    if regions:
         for i, region in enumerate(regions):
             with tabs[i + 1]:
                 region_data = cr[cr["권역"] == region].copy()
@@ -2612,7 +2882,8 @@ elif page == "📊 3.안부체크율":
                     )
                     st.plotly_chart(fig2, use_container_width=True)
 
-        # 추가 지표
+    # 추가 지표 (시계열 데이터 있을 때만)
+    if not checkin_rate.empty:
         extra_metrics = [m for m in ["안부확인율", "48미확인율", "안부콜응답률"] if m in checkin_rate.columns]
         if extra_metrics:
             st.markdown("---")
@@ -2635,18 +2906,6 @@ elif page == "📊 3.안부체크율":
                     legend=LEGEND_BELOW_LARGE,
                 )
                 st.plotly_chart(fig3, use_container_width=True)
-    else:
-        # DB 폴백
-        try:
-            safety_db = get_db_data("raw_safety_check")
-        except:
-            safety_db = pd.DataFrame()
-        if not safety_db.empty and "complete_user_count" in safety_db.columns:
-            mun_rate = safety_db.copy()
-            mun_rate["안부체크율"] = (mun_rate["complete_user_count"] / mun_rate["target_user_count"].replace(0, float("nan")) * 100).round(1).fillna(0)
-            st.dataframe(mun_rate[["date", "agency_name", "안부체크율"]].sort_values("date", ascending=False), use_container_width=True)
-        else:
-            st.info("데이터가 없습니다.")
 
 
 # ============================================================
