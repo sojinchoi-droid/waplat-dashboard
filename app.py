@@ -2900,14 +2900,13 @@ elif page == "❤ 6.심혈관체크":
 # ============================================================
 elif page == "💊 8.복약관리":
     st.markdown('<div class="section-header">💊 복약관리</div>', unsafe_allow_html=True)
-    selected_biz = biz_selector("복약관리")
     st.divider()
     p_start, p_end = page_week_range_selector("med", weeks)
 
     # 데이터 준비
-    med_users = biz_filter_df(data.get("weekly_복약등록회원", pd.DataFrame()), selected_biz)
-    med_count = biz_filter_df(data.get("weekly_복약등록건수", pd.DataFrame()), selected_biz)
-    reg = biz_filter_df(data.get("registration", pd.DataFrame()), selected_biz)
+    med_users = data.get("weekly_복약등록회원", pd.DataFrame())
+    med_count = data.get("weekly_복약등록건수", pd.DataFrame())
+    reg = data.get("registration", pd.DataFrame())
 
     # 전체 가입완료자 수 (비율 계산용)
     total_registered = 0
@@ -2920,43 +2919,30 @@ elif page == "💊 8.복약관리":
         # 지자체별 스택 바 우선 표시 (per-municipality 데이터 있을 때)
         _mu1_src = data.get("weekly_복약등록회원", pd.DataFrame())
         if not _mu1_src.empty:
-            _mu1 = biz_filter_df(_mu1_src, selected_biz) if selected_biz != "전체" else _mu1_src
-            if not _mu1.empty:
-                mf_b1 = filter_by_week_range(_mu1, "주차", p_start, p_end, weeks)
-                mf_b1 = shorten_dates_in_df(mf_b1, "주차")
-                mf_b1 = mf_b1.dropna(subset=["주차"])
-                fig_b1 = go.Figure()
-                muns_b1 = sorted(mf_b1["지자체명"].unique())
-                for mun in muns_b1:
-                    mun_df = mf_b1[mf_b1["지자체명"] == mun].sort_values("주차")
-                    if selected_biz == "전체":
-                        # 사업구분 색으로 구분
-                        _biz_of = BUSINESS_TYPE_MAP.get(mun, "기타")
-                        _color = BUSINESS_TYPE_COLORS.get(_biz_of, "#9E9E9E")
-                        _leg_grp = _biz_of
-                    else:
-                        _color = MUNICIPALITY_COLORS.get(mun, "#9E9E9E")
-                        _leg_grp = mun
-                    fig_b1.add_trace(go.Bar(
-                        x=mun_df["주차"], y=mun_df["값"],
-                        name=mun, marker_color=_color,
-                        legendgroup=_leg_grp,
-                        hovertemplate=f"<b>%{{x}}</b><br>{mun}: %{{y:,}}명<extra></extra>",
-                    ))
-                _title_suf = f" ({selected_biz})" if selected_biz != "전체" else " (사업구분별 색 구분)"
-                fig_b1.update_layout(
-                    barmode="stack",
-                    title=f"복약 등록 회원수 — 지자체별{_title_suf}",
-                    height=520, hovermode="x unified",
-                    xaxis=dict(type="category"),
-                    legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0,
-                                font=dict(size=11)),
-                    margin=dict(t=40, b=130),
-                )
-                fig_b1.update_yaxes(title_text="등록 회원수 (명)")
-                st.plotly_chart(fig_b1, use_container_width=True)
-            else:
-                st.info(f"{selected_biz} 해당 지자체 복약 등록 회원 데이터가 없습니다.")
+            mf_b1 = filter_by_week_range(_mu1_src, "주차", p_start, p_end, weeks)
+            mf_b1 = shorten_dates_in_df(mf_b1, "주차")
+            mf_b1 = mf_b1.dropna(subset=["주차"])
+            fig_b1 = go.Figure()
+            muns_b1 = sorted(mf_b1["지자체명"].unique())
+            for mun in muns_b1:
+                mun_df = mf_b1[mf_b1["지자체명"] == mun].sort_values("주차")
+                _color = MUNICIPALITY_COLORS.get(mun, "#9E9E9E")
+                fig_b1.add_trace(go.Bar(
+                    x=mun_df["주차"], y=mun_df["값"],
+                    name=mun, marker_color=_color,
+                    hovertemplate=f"<b>%{{x}}</b><br>{mun}: %{{y:,}}명<extra></extra>",
+                ))
+            fig_b1.update_layout(
+                barmode="stack",
+                title="복약 등록 회원수 — 지자체별",
+                height=520, hovermode="x unified",
+                xaxis=dict(type="category"),
+                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0,
+                            font=dict(size=11)),
+                margin=dict(t=40, b=130),
+            )
+            fig_b1.update_yaxes(title_text="등록 회원수 (명)")
+            st.plotly_chart(fig_b1, use_container_width=True)
         else:
             # fallback: 전체 raw sheet 집계 차트
             med_raw = sheets.get("복약등록회원", pd.DataFrame())
@@ -3013,42 +2999,30 @@ elif page == "💊 8.복약관리":
         # 지자체별 스택 바 우선 표시
         _mu2_src = data.get("weekly_복약등록건수", pd.DataFrame())
         if not _mu2_src.empty:
-            _mu2 = biz_filter_df(_mu2_src, selected_biz) if selected_biz != "전체" else _mu2_src
-            if not _mu2.empty:
-                mf_b2 = filter_by_week_range(_mu2, "주차", p_start, p_end, weeks)
-                mf_b2 = shorten_dates_in_df(mf_b2, "주차")
-                mf_b2 = mf_b2.dropna(subset=["주차"])
-                fig_b2 = go.Figure()
-                muns_b2 = sorted(mf_b2["지자체명"].unique())
-                for mun in muns_b2:
-                    mun_df = mf_b2[mf_b2["지자체명"] == mun].sort_values("주차")
-                    if selected_biz == "전체":
-                        _biz_of = BUSINESS_TYPE_MAP.get(mun, "기타")
-                        _color = BUSINESS_TYPE_COLORS.get(_biz_of, "#9E9E9E")
-                        _leg_grp = _biz_of
-                    else:
-                        _color = MUNICIPALITY_COLORS.get(mun, "#66BB6A")
-                        _leg_grp = mun
-                    fig_b2.add_trace(go.Bar(
-                        x=mun_df["주차"], y=mun_df["값"],
-                        name=mun, marker_color=_color,
-                        legendgroup=_leg_grp,
-                        hovertemplate=f"<b>%{{x}}</b><br>{mun}: %{{y:,}}건<extra></extra>",
-                    ))
-                _title_suf2 = f" ({selected_biz})" if selected_biz != "전체" else " (사업구분별 색 구분)"
-                fig_b2.update_layout(
-                    barmode="stack",
-                    title=f"복약 등록건수 — 지자체별{_title_suf2}",
-                    height=520, hovermode="x unified",
-                    xaxis=dict(type="category"),
-                    legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0,
-                                font=dict(size=11)),
-                    margin=dict(t=40, b=130),
-                )
-                fig_b2.update_yaxes(title_text="등록건수 (건)")
-                st.plotly_chart(fig_b2, use_container_width=True)
-            else:
-                st.info(f"{selected_biz} 해당 지자체 복약 등록건수 데이터가 없습니다.")
+            mf_b2 = filter_by_week_range(_mu2_src, "주차", p_start, p_end, weeks)
+            mf_b2 = shorten_dates_in_df(mf_b2, "주차")
+            mf_b2 = mf_b2.dropna(subset=["주차"])
+            fig_b2 = go.Figure()
+            muns_b2 = sorted(mf_b2["지자체명"].unique())
+            for mun in muns_b2:
+                mun_df = mf_b2[mf_b2["지자체명"] == mun].sort_values("주차")
+                _color = MUNICIPALITY_COLORS.get(mun, "#66BB6A")
+                fig_b2.add_trace(go.Bar(
+                    x=mun_df["주차"], y=mun_df["값"],
+                    name=mun, marker_color=_color,
+                    hovertemplate=f"<b>%{{x}}</b><br>{mun}: %{{y:,}}건<extra></extra>",
+                ))
+            fig_b2.update_layout(
+                barmode="stack",
+                title="복약 등록건수 — 지자체별",
+                height=520, hovermode="x unified",
+                xaxis=dict(type="category"),
+                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0,
+                            font=dict(size=11)),
+                margin=dict(t=40, b=130),
+            )
+            fig_b2.update_yaxes(title_text="등록건수 (건)")
+            st.plotly_chart(fig_b2, use_container_width=True)
         else:
             med_count_raw = sheets.get("복약등록건수", pd.DataFrame())
             med_count_c = data.get("total_복약등록건수", pd.DataFrame())
