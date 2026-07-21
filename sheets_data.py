@@ -190,14 +190,19 @@ def _build_ai_gubn_mapping() -> dict:
 def get_ai_municipality_ext(sheets: dict) -> pd.DataFrame:
     """메인 시트(gid=887906400) B열('주차별 현황') 기준 지자체별 주차 데이터.
 
-    B열에 값이 있는 행만 반환(통합 행 제외).
-    '기간'과 '월간구분' 모두 B열 값('7월 1주' 등)으로 설정.
+    B열이 있는 행은 B열 값을 X축 라벨로 사용.
+    B열이 비어있으면 A열(주차번호) + 외부 시트 매핑(_gubn_map)으로 보완.
     """
     import re as _re_ext
     df = sheets.get("AI생활지원사신규", pd.DataFrame())
     if df.empty or len(df.columns) < 4:
         return pd.DataFrame()
     df = df.copy()
+
+    # A열 forward-fill: 통합 행에만 주차번호가 있으므로 아래 행에 채움
+    df.iloc[:, 0] = df.iloc[:, 0].ffill()
+
+    _gubn_map = sheets.get("ai_gubn_mapping", {})
 
     num_cols = [
         "계약인원", "가입인원", "receiveAlarmCount", "receiveAlarmUserCount",
@@ -207,15 +212,22 @@ def get_ai_municipality_ext(sheets: dict) -> pd.DataFrame:
 
     result_rows = []
     for _, row in df.iterrows():
-        gubn = str(row.iloc[1]).strip() if len(row) > 1 else ""   # B열 = 주차별 현황
+        gubn = str(row.iloc[1]).strip() if len(row) > 1 else ""   # B열
         name = str(row.iloc[3]).strip() if len(row) > 3 else ""   # D열 = 지자체명
 
-        # B열 없거나 유효한 월 패턴 아니면 제외
-        if not _re_ext.search(r'\d+월', gubn):
-            continue
         # 통합 집계 행 제외
         if name in ("nan", "", "NaN", "통합"):
             continue
+
+        # B열이 비어있으면 외부 시트 매핑으로 보완
+        if not _re_ext.search(r'\d+월', gubn):
+            wk_str = str(row.iloc[0]).strip()
+            wk_m = _re_ext.search(r'(\d+)', wk_str)
+            if wk_m:
+                wk_num = int(wk_m.group(1))
+                gubn = _gubn_map.get((wk_num, name), "")
+            if not _re_ext.search(r'\d+월', gubn):
+                continue  # 라벨 없으면 제외
 
         alarm_day = str(row.get("알람요일", "")).strip()
         alarm_day = "" if alarm_day in ("nan", "NaN") else alarm_day
@@ -232,7 +244,7 @@ def get_ai_municipality_ext(sheets: dict) -> pd.DataFrame:
 
     if not result_rows:
         return pd.DataFrame()
-    print(f"[sheets_data] ai_municipality_ext(B열 기준): {len(result_rows)}행 로드")
+    print(f"[sheets_data] ai_municipality_ext(B열+매핑 기준): {len(result_rows)}행 로드")
     return pd.DataFrame(result_rows)
 
 
