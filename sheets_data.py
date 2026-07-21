@@ -8,6 +8,10 @@ import requests
 SPREADSHEET_ID = "15UZ9dZjYdD24PdWoSvrFWpQCM-T0vhc_yy9wrMunSNc"
 BASE_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&gid="
 
+# AI 생활지원사 월간구분 외부 시트 (지자체별 X축 레이블)
+# 구조: A=주차, B=날짜범위, C=월간구분("3월 2주" 등), D=지자체명/통합
+_EXT_GUBN_URL = "https://docs.google.com/spreadsheets/d/119srCb-aMqslErS7seMjQ1DPQEQPZ7bsY_Q5R-fwgSE/gviz/tq?tqx=out:csv&gid=1010714986"
+
 # 20개 시트 GID 매핑
 SHEET_GIDS = {
     "이용자현황":       "33599894",
@@ -131,6 +135,107 @@ def fetch_sheet(gid: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _build_ai_gubn_mapping() -> dict:
+    """AI 생활지원사 외부 시트(gid=1010714986)에서 (주차번호, 지자체명) → 월간구분 매핑 구축.
+
+    시트 구조: A=주차, B=날짜범위, C=월간구분(3월 2주 등), D=지자체명/통합
+    - 주차 첫 행(통합): A에 "11주차", C에 해당 주 기본 월간구분
+    - 지자체별 행: D에 지자체명, C에 지자체별 월간구분(없으면 통합 값 사용)
+    """
+    import re as _re
+    mapping = {}
+    try:
+        resp = requests.get(_EXT_GUBN_URL, timeout=20, allow_redirects=True)
+        resp.raise_for_status()
+        content = resp.content.decode("utf-8-sig")
+        df = pd.read_csv(io.StringIO(content))
+        df = df.dropna(how="all").dropna(axis=1, how="all")
+    except Exception as e:
+        print(f"[sheets_data] ai_gubn fetch 실패: {e}")
+        return {}
+
+    if df.empty or len(df.columns) < 4:
+        return {}
+
+    current_wk = 0
+    default_gubn = ""
+
+    for _, row in df.iterrows():
+        a = str(row.iloc[0]).strip() if len(row) > 0 else ""
+        c = str(row.iloc[2]).strip() if len(row) > 2 else ""
+        d = str(row.iloc[3]).strip() if len(row) > 3 else ""
+
+        if a not in ("nan", "NaN", ""):
+            m = _re.search(r'(\d+)주차', a)
+            if m:
+                current_wk = int(m.group(1))
+
+        if current_wk == 0:
+            continue
+
+        gubn_val = "" if c in ("nan", "NaN") else c
+        name_val = "" if d in ("nan", "NaN") else d
+
+        if name_val == "통합":
+            pass  # 통합 집계 행은 건너뜀
+        elif name_val:
+            if gubn_val:
+                # C열 명시값만 사용 — 통합 상속 없음
+                mapping[(current_wk, name_val)] = gubn_val
+
+    print(f"[sheets_data] ai_gubn_mapping: {len(mapping)}개 매핑 로드")
+    return mapping
+
+
+def get_ai_municipality_ext(sheets: dict) -> pd.DataFrame:
+    """메인 시트(gid=887906400) B열('주차별 현황') 기준 지자체별 주차 데이터.
+
+    B열에 값이 있는 행만 반환(통합 행 제외).
+    '기간'과 '월간구분' 모두 B열 값('7월 1주' 등)으로 설정.
+    """
+    import re as _re_ext
+    df = sheets.get("AI생활지원사신규", pd.DataFrame())
+    if df.empty or len(df.columns) < 4:
+        return pd.DataFrame()
+    df = df.copy()
+
+    num_cols = [
+        "계약인원", "가입인원", "receiveAlarmCount", "receiveAlarmUserCount",
+        "intro", "intro(%)", "service proposal", "service proposal(%)",
+        "program complete", "program(%)",
+    ]
+
+    result_rows = []
+    for _, row in df.iterrows():
+        gubn = str(row.iloc[1]).strip() if len(row) > 1 else ""   # B열 = 주차별 현황
+        name = str(row.iloc[3]).strip() if len(row) > 3 else ""   # D열 = 지자체명
+
+        # B열 없거나 유효한 월 패턴 아니면 제외
+        if not _re_ext.search(r'\d+월', gubn):
+            continue
+        # 통합 집계 행 제외
+        if name in ("nan", "", "NaN", "통합"):
+            continue
+
+        alarm_day = str(row.get("알람요일", "")).strip()
+        alarm_day = "" if alarm_day in ("nan", "NaN") else alarm_day
+
+        r = {"기간": gubn, "지자체": name, "알람요일": alarm_day, "월간구분": gubn}
+        for nc in num_cols:
+            if nc in df.columns:
+                r[nc] = safe_numeric(row.get(nc, 0))
+        # 월의 1째 주는 서비스 제안율 항상 0 (집계 특성상)
+        if _re_ext.search(r'\d+월 1주', gubn):
+            r["service proposal"] = 0.0
+            r["service proposal(%)"] = 0.0
+        result_rows.append(r)
+
+    if not result_rows:
+        return pd.DataFrame()
+    print(f"[sheets_data] ai_municipality_ext(B열 기준): {len(result_rows)}행 로드")
+    return pd.DataFrame(result_rows)
+
+
 def fetch_all_sheets() -> dict:
     """모든 시트 데이터를 병렬로 한 번에 가져오기 (ThreadPoolExecutor)"""
     data = {}
@@ -145,6 +250,9 @@ def fetch_all_sheets() -> dict:
         for future in as_completed(futures):
             name, df = future.result()
             data[name] = df
+
+    # AI 생활지원사 월간구분 매핑 (외부 스프레드시트)
+    data["ai_gubn_mapping"] = _build_ai_gubn_mapping()
 
     return data
 
@@ -709,9 +817,13 @@ def get_ai_municipality_data(sheets: dict) -> pd.DataFrame:
     period_col    = df.columns[0]   # '구분' — 주차 번호 (e.g. '11주차')
     date_range_col = df.columns[1]  # 날짜범위 (e.g. '3월 8일~14일')
 
-    # 두 컬럼 모두 forward-fill (각 주 첫 행에만 값이 있음)
+    # 두 컬럼 forward-fill (각 주 첫 행에만 값이 있음)
     df[period_col]    = df[period_col].ffill()
     df[date_range_col] = df[date_range_col].ffill()
+
+    # 외부 시트 월간구분 매핑: (주차번호, 지자체명) → "3월 2주" 등
+    import re as _re2
+    _gubn_map = sheets.get("ai_gubn_mapping", {})
 
     # ── 지자체명 컬럼 자동 탐지 ─────────────────────────────────────────
     # '통합' 또는 시청/군청/서비스원 등 지자체 키워드를 포함하는 컬럼 탐색
@@ -749,13 +861,18 @@ def get_ai_municipality_data(sheets: dict) -> pd.DataFrame:
         alarm_day = str(row.get("알람요일", "")).strip()
         alarm_day = "" if alarm_day in ("nan", "NaN") else alarm_day
 
+        # 외부 시트 C열: (주차번호, 지자체명) → "3월 2주" 매핑
+        _wk_m = _re2.search(r'(\d+)주차', period)
+        _wk_num = int(_wk_m.group(1)) if _wk_m else 0
+        gubn = _gubn_map.get((_wk_num, name), "")
+
         # 기간: '11주차 (3월 8일~14일)' 형태로 조합 → 월 정보 포함
         if period and date_range and date_range not in ("nan", "NaN"):
             full_period = f"{period} ({date_range})"
         else:
             full_period = period or date_range
 
-        r = {"기간": full_period, "지자체": name, "알람요일": alarm_day}
+        r = {"기간": full_period, "지자체": name, "알람요일": alarm_day, "월간구분": gubn}
         for nc in num_cols:
             if nc in df.columns:
                 r[nc] = safe_numeric(row.get(nc, 0))
@@ -957,6 +1074,82 @@ def get_checkin_mun_rate_direct() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def get_checkin_mun_weekly() -> pd.DataFrame:
+    """안부확인지자체 시트 C:AK(분모=전체회원)/AL:BT(분자=안부확인자)를 직접 읽어
+    주차별 지자체별 안부확인율 시계열 반환 (long-format, 모든 주차)
+
+    Returns: DataFrame [시작일, 지자체명, 분모, 분자, 안부확인율]
+    """
+    GID = SHEET_GIDS["안부확인지자체"]
+    url = BASE_URL + GID + "&range=A:BT"
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        content = resp.content.decode("utf-8-sig")
+        df = pd.read_csv(io.StringIO(content))
+        df = df.dropna(how="all")
+    except Exception as e:
+        print(f"[sheets_data] get_checkin_mun_weekly error: {e}")
+        return pd.DataFrame()
+
+    if df.empty or len(df.columns) < 72:
+        return pd.DataFrame()
+
+    header = list(df.columns)
+
+    UNLABELED_NAMES = [
+        "경기도청", "용인시청", "서초구청", "진천군청", "음성군청",
+        "강북구청", "금정구청", "괴산군청", "증평군청", "포천시청",
+    ]
+
+    date_series = df.iloc[:, 0].astype(str).str.strip()
+    valid_mask = date_series.str.match(r"\d{4}-\d{2}-\d{2}")
+    valid_df = df[valid_mask].reset_index(drop=True)
+    if valid_df.empty:
+        return pd.DataFrame()
+
+    rows = []
+    for row_idx in range(len(valid_df)):
+        date_val = str(valid_df.iloc[row_idx, 0])
+        vals = valid_df.iloc[row_idx].values
+
+        # ① C~L (위치 2-11) 분모 / AL~AU (위치 37-46) 분자
+        for i, name in enumerate(UNLABELED_NAMES):
+            if name not in ALL_KNOWN_AGENCIES:
+                continue
+            denom = safe_numeric(vals[2 + i])
+            numer = safe_numeric(vals[37 + i])
+            if denom > 0:
+                rows.append({
+                    "시작일": date_val, "지자체명": name,
+                    "분모": int(denom), "분자": int(numer),
+                    "안부확인율": round(numer / denom * 100, 1),
+                })
+
+        # ② M~AK (위치 12-36) 분모 / AV~BT (위치 47-71) 분자
+        for i in range(25):
+            col_label = str(header[12 + i]).replace("\n", "").replace(" ", "").strip()
+            mun_name = None
+            for kw in MUNICIPALITY_KEYWORDS:
+                if kw in col_label:
+                    mun_name = normalize_agency_name(kw)
+                    break
+            if mun_name is None:
+                mun_name = normalize_agency_name(col_label)
+            if mun_name not in ALL_KNOWN_AGENCIES:
+                continue
+            denom = safe_numeric(vals[12 + i])
+            numer = safe_numeric(vals[47 + i])
+            if denom > 0:
+                rows.append({
+                    "시작일": date_val, "지자체명": mun_name,
+                    "분모": int(denom), "분자": int(numer),
+                    "안부확인율": round(numer / denom * 100, 1),
+                })
+
+    return pd.DataFrame(rows)
+
+
 def get_checkin_municipality_rate(sheets: dict) -> pd.DataFrame:
     """안부확인지자체 시트에서 지자체별 안부체크율 추출 (off 대상자 반영)
 
@@ -1128,6 +1321,9 @@ def build_dashboard_data(sheets: dict) -> dict:
     # 3-2. 지자체별 안부확인율 (C:AK 분모 / AL:BT 분자 직접 계산)
     result["checkin_mun_rate_direct"] = get_checkin_mun_rate_direct()
 
+    # 3-2b. 주차별 지자체별 안부확인율 시계열 (사업구분별 필터 용)
+    result["checkin_mun_weekly"] = get_checkin_mun_weekly()
+
     # 3-3. 지자체별 안부체크율 (PH:QJ 직접 계산)
     result["checkin_mun_check_direct"] = get_mun_check_rate_direct()
 
@@ -1155,6 +1351,7 @@ def build_dashboard_data(sheets: dict) -> dict:
     result["ai_funnel"] = get_ai_funnel(sheets)
     result["ai_monthly"] = get_ai_monthly(sheets)
     result["ai_municipality"] = get_ai_municipality_data(sheets)
+    result["ai_municipality_ext"] = get_ai_municipality_ext(sheets)
     result["ai_mun_monthly"] = get_ai_mun_monthly(sheets)
     result["weekly_registered_by_mun"] = get_weekly_registered_by_municipality(sheets)
 
