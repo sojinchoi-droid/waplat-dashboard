@@ -2916,149 +2916,92 @@ elif page == "💊 8.복약관리":
     tab1, tab2, tab3, tab4 = st.tabs(["활성 이용자 복약 이용자수", "활성 이용자 복약 등록건수", "지자체별 비중", "상세 데이터"])
 
     with tab1:
-        # 지자체별 스택 바 우선 표시 (per-municipality 데이터 있을 때)
-        _mu1_src = data.get("weekly_복약등록회원", pd.DataFrame())
-        if not _mu1_src.empty:
-            mf_b1 = filter_by_week_range(_mu1_src, "주차", p_start, p_end, weeks)
-            mf_b1 = shorten_dates_in_df(mf_b1, "주차")
-            mf_b1 = mf_b1.dropna(subset=["주차"])
-            fig_b1 = go.Figure()
-            muns_b1 = sorted(mf_b1["지자체명"].unique())
-            for mun in muns_b1:
-                mun_df = mf_b1[mf_b1["지자체명"] == mun].sort_values("주차")
-                _color = MUNICIPALITY_COLORS.get(mun, "#9E9E9E")
-                fig_b1.add_trace(go.Bar(
-                    x=mun_df["주차"], y=mun_df["값"],
-                    name=mun, marker_color=_color,
-                    hovertemplate=f"<b>%{{x}}</b><br>{mun}: %{{y:,}}명<extra></extra>",
-                ))
-            fig_b1.update_layout(
-                barmode="stack",
-                title="복약 등록 회원수 — 지자체별",
-                height=520, hovermode="x unified",
-                xaxis=dict(type="category"),
-                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0,
-                            font=dict(size=11)),
-                margin=dict(t=40, b=130),
-            )
-            fig_b1.update_yaxes(title_text="등록 회원수 (명)")
-            st.plotly_chart(fig_b1, use_container_width=True)
-        else:
-            # fallback: 전체 raw sheet 집계 차트
-            med_raw = sheets.get("복약등록회원", pd.DataFrame())
-            if not med_raw.empty:
-                mr = med_raw.copy()
-                _wc, _sum_col, _ratio_col = None, None, None
-                for c in mr.columns:
-                    cl = str(c).replace("\n", "").strip()
-                    if "주차" in cl: _wc = c
-                    elif "이용자" in cl and "합계" in cl: _sum_col = c
-                    elif cl == "비율" or ("비율" in cl and "WoW" not in cl and "1인" not in cl): _ratio_col = c
-                if _wc and _sum_col:
-                    mr[_sum_col] = mr[_sum_col].apply(safe_numeric)
-                    if _ratio_col:
-                        mr[_ratio_col] = mr[_ratio_col].apply(safe_numeric)
-                    mr = filter_by_week_range(mr, _wc, p_start, p_end, weeks)
-                    mr = shorten_dates_in_df(mr, _wc)
-                    mr = mr[mr[_wc].astype(str).str.strip() != ""]
-                    fig = make_subplots(specs=[[{"secondary_y": True}]])
-                    fig.add_trace(go.Bar(
-                        x=mr[_wc], y=mr[_sum_col],
-                        name="이용자 수 합계", marker_color="#424242",
-                        text=mr[_sum_col].apply(lambda x: f"{x:,.0f}"),
-                        textposition="outside", textfont=dict(size=13),
-                        hovertemplate="<b>%{x}</b><br>이용자수: %{y:,}명<extra></extra>"
-                    ), secondary_y=False)
-                    if _ratio_col:
-                        fig.add_trace(go.Scatter(
-                            x=mr[_wc], y=mr[_ratio_col],
-                            name="비율", mode="lines+markers+text",
-                            line=dict(color="#FF6F00", width=2),
-                            text=mr[_ratio_col].apply(lambda x: f"{x:.0f}%"),
-                            textposition="top center", textfont=dict(size=13, color="#FF6F00"),
-                            hovertemplate="<b>%{x}</b><br>비율: %{y:.1f}%<extra></extra>"
-                        ), secondary_y=True)
-                    fig.update_layout(
-                        title="활성 이용자 복약 이용자수",
-                        height=450, hovermode="x unified",
-                        xaxis=dict(type="category"),
-                        legend=LEGEND_BELOW, margin=dict(t=40, b=70), bargap=0.3,
-                    )
-                    fig.update_yaxes(title_text="이용자수 (명)", secondary_y=False)
-                    if _ratio_col:
-                        max_ratio = mr[_ratio_col].max()
-                        fig.update_yaxes(title_text="비율 (%)", secondary_y=True,
-                                         range=[0, max(25, max_ratio * 1.3) if max_ratio > 0 else 25])
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("복약 등록 회원수 시트에서 합계/비율 컬럼을 찾을 수 없습니다.")
+        med_raw = sheets.get("복약등록회원", pd.DataFrame())
+        if not med_raw.empty:
+            mr = med_raw.copy()
+            _wc, _sum_col, _ratio_col = None, None, None
+            for c in mr.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl: _wc = c
+                elif "이용자" in cl and "합계" in cl: _sum_col = c
+                elif cl == "비율" or ("비율" in cl and "WoW" not in cl and "1인" not in cl): _ratio_col = c
+            if _wc and _sum_col:
+                mr[_sum_col] = mr[_sum_col].apply(safe_numeric)
+                if _ratio_col:
+                    mr[_ratio_col] = mr[_ratio_col].apply(safe_numeric)
+                mr = filter_by_week_range(mr, _wc, p_start, p_end, weeks)
+                mr = shorten_dates_in_df(mr, _wc)
+                mr = mr[mr[_wc].astype(str).str.strip() != ""]
+                fig = make_subplots(specs=[[{"secondary_y": True}]])
+                fig.add_trace(go.Bar(
+                    x=mr[_wc], y=mr[_sum_col],
+                    name="이용자 수 합계", marker_color="#424242",
+                    text=mr[_sum_col].apply(lambda x: f"{x:,.0f}"),
+                    textposition="outside", textfont=dict(size=13),
+                    hovertemplate="<b>%{x}</b><br>이용자수: %{y:,}명<extra></extra>"
+                ), secondary_y=False)
+                if _ratio_col:
+                    fig.add_trace(go.Scatter(
+                        x=mr[_wc], y=mr[_ratio_col],
+                        name="비율", mode="lines+markers+text",
+                        line=dict(color="#FF6F00", width=2),
+                        text=mr[_ratio_col].apply(lambda x: f"{x:.0f}%"),
+                        textposition="top center", textfont=dict(size=13, color="#FF6F00"),
+                        hovertemplate="<b>%{x}</b><br>비율: %{y:.1f}%<extra></extra>"
+                    ), secondary_y=True)
+                fig.update_layout(
+                    title="활성 이용자 복약 이용자수",
+                    height=450, hovermode="x unified",
+                    xaxis=dict(type="category"),
+                    legend=LEGEND_BELOW, margin=dict(t=40, b=70), bargap=0.3,
+                )
+                fig.update_yaxes(title_text="이용자수 (명)", secondary_y=False)
+                if _ratio_col:
+                    max_ratio = mr[_ratio_col].max()
+                    fig.update_yaxes(title_text="비율 (%)", secondary_y=True,
+                                     range=[0, max(25, max_ratio * 1.3) if max_ratio > 0 else 25])
+                st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info("복약 등록 회원수 데이터가 없습니다.")
+                st.info("복약 등록 회원수 시트에서 합계/비율 컬럼을 찾을 수 없습니다.")
+        else:
+            st.info("복약 등록 회원수 데이터가 없습니다.")
 
     with tab2:
-        # 지자체별 스택 바 우선 표시
-        _mu2_src = data.get("weekly_복약등록건수", pd.DataFrame())
-        if not _mu2_src.empty:
-            mf_b2 = filter_by_week_range(_mu2_src, "주차", p_start, p_end, weeks)
-            mf_b2 = shorten_dates_in_df(mf_b2, "주차")
-            mf_b2 = mf_b2.dropna(subset=["주차"])
-            fig_b2 = go.Figure()
-            muns_b2 = sorted(mf_b2["지자체명"].unique())
-            for mun in muns_b2:
-                mun_df = mf_b2[mf_b2["지자체명"] == mun].sort_values("주차")
-                _color = MUNICIPALITY_COLORS.get(mun, "#66BB6A")
-                fig_b2.add_trace(go.Bar(
-                    x=mun_df["주차"], y=mun_df["값"],
-                    name=mun, marker_color=_color,
-                    hovertemplate=f"<b>%{{x}}</b><br>{mun}: %{{y:,}}건<extra></extra>",
-                ))
-            fig_b2.update_layout(
-                barmode="stack",
-                title="복약 등록건수 — 지자체별",
-                height=520, hovermode="x unified",
-                xaxis=dict(type="category"),
-                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0,
-                            font=dict(size=11)),
-                margin=dict(t=40, b=130),
-            )
-            fig_b2.update_yaxes(title_text="등록건수 (건)")
-            st.plotly_chart(fig_b2, use_container_width=True)
+        med_count_raw = sheets.get("복약등록건수", pd.DataFrame())
+        med_count_c = data.get("total_복약등록건수", pd.DataFrame())
+        if not med_count_raw.empty:
+            mc_raw = med_count_raw.copy()
+            _wc, _sum_col, _rc = None, None, None
+            for c in mc_raw.columns:
+                cl = str(c).replace("\n", "").strip()
+                if "주차" in cl and _wc is None: _wc = c
+                elif "합계" in cl and _sum_col is None: _sum_col = c
+                elif ("전체이용비중" in cl or "이용비중" in cl) and _rc is None: _rc = c
+            if _wc:
+                mc_raw = filter_by_week_range(mc_raw, _wc, p_start, p_end, weeks)
+                mc_raw = shorten_dates_in_df(mc_raw, _wc)
+                if not med_count_c.empty:
+                    mct = filter_by_week_range(med_count_c, "주차", p_start, p_end, weeks)
+                    mct = shorten_dates_in_df(mct, "주차")
+                    ct_map = dict(zip(mct["주차"], mct["값"].apply(safe_numeric)))
+                    mc_raw["_bar"] = mc_raw[_wc].map(ct_map).fillna(mc_raw[_sum_col].apply(safe_numeric) if _sum_col else 0)
+                    bar_col_use = "_bar"
+                else:
+                    bar_col_use = _sum_col
+                if bar_col_use:
+                    plot_bar_rate_dual(mc_raw, _wc, bar_col_use, "등록건수", "#66BB6A",
+                                       _rc, "전체이용비중", "#FF6F00",
+                                       "활성 이용자 복약 등록건수 + 전체이용비중", bar_unit="건")
+        elif not med_count.empty:
+            mf = filter_by_week_range(med_count, "주차", p_start, p_end, weeks)
+            total = mf.groupby("주차")["값"].sum().reset_index()
+            total.columns = ["주차", "등록건수합계"]
+            total = shorten_dates_in_df(total, "주차")
+            plot_bar_rate_dual(total, "주차", "등록건수합계", "등록건수", "#66BB6A",
+                               None, None, None,
+                               "활성 이용자 복약 등록건수", bar_unit="건")
         else:
-            med_count_raw = sheets.get("복약등록건수", pd.DataFrame())
-            med_count_c = data.get("total_복약등록건수", pd.DataFrame())
-            if not med_count_raw.empty:
-                mc_raw = med_count_raw.copy()
-                _wc, _sum_col, _rc = None, None, None
-                for c in mc_raw.columns:
-                    cl = str(c).replace("\n", "").strip()
-                    if "주차" in cl and _wc is None: _wc = c
-                    elif "합계" in cl and _sum_col is None: _sum_col = c
-                    elif ("전체이용비중" in cl or "이용비중" in cl) and _rc is None: _rc = c
-                if _wc:
-                    mc_raw = filter_by_week_range(mc_raw, _wc, p_start, p_end, weeks)
-                    mc_raw = shorten_dates_in_df(mc_raw, _wc)
-                    if not med_count_c.empty:
-                        mct = filter_by_week_range(med_count_c, "주차", p_start, p_end, weeks)
-                        mct = shorten_dates_in_df(mct, "주차")
-                        ct_map = dict(zip(mct["주차"], mct["값"].apply(safe_numeric)))
-                        mc_raw["_bar"] = mc_raw[_wc].map(ct_map).fillna(mc_raw[_sum_col].apply(safe_numeric) if _sum_col else 0)
-                        bar_col_use = "_bar"
-                    else:
-                        bar_col_use = _sum_col
-                    if bar_col_use:
-                        plot_bar_rate_dual(mc_raw, _wc, bar_col_use, "등록건수", "#66BB6A",
-                                           _rc, "전체이용비중", "#FF6F00",
-                                           "활성 이용자 복약 등록건수 + 전체이용비중", bar_unit="건")
-            elif not med_count.empty:
-                mf = filter_by_week_range(med_count, "주차", p_start, p_end, weeks)
-                total = mf.groupby("주차")["값"].sum().reset_index()
-                total.columns = ["주차", "등록건수합계"]
-                total = shorten_dates_in_df(total, "주차")
-                plot_bar_rate_dual(total, "주차", "등록건수합계", "등록건수", "#66BB6A",
-                                   None, None, None,
-                                   "활성 이용자 복약 등록건수", bar_unit="건")
-            else:
-                st.info("복약 등록건수 데이터가 없습니다.")
+            st.info("복약 등록건수 데이터가 없습니다.")
 
     with tab3:
         # 지자체별 비중 추이
