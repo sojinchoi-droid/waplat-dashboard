@@ -1902,7 +1902,11 @@ elif page == "🧭 사업구분별 현황":
     biz_status_df = pd.DataFrame(_rows)
 
     def _fmt(v, suffix=""):
-        return "-" if v is None else f"{v:,}{suffix}" if isinstance(v, int) else f"{v}{suffix}"
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return "-"
+        if isinstance(v, float) and v == int(v):
+            v = int(v)
+        return f"{v:,}{suffix}"
 
     for _, r in biz_status_df.iterrows():
         _color = BUSINESS_TYPE_COLORS.get(r["사업구분"], "#666")
