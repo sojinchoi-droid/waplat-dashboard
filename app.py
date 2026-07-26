@@ -3686,9 +3686,6 @@ elif page == "🛡 5.안부체크 변경(세이프)":
 elif page == "🎮 12.맞고(와플랫+게스트)":
     st.markdown('<div class="section-header">🎮 맞고 (와플랫+게스트)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_all", weeks)
-    selected_biz = biz_selector("맞고전체")
-    if selected_biz != "전체":
-        st.info("와플랫+게스트 통합 집계 데이터는 지자체별 분리가 없어 사업구분 필터가 반영되지 않습니다. 지자체별 사업구분 확인은 11.맞고(와플랫)을 이용하세요.")
     st.divider()
 
     # 집계형 시트에서 직접 가져오기
@@ -3876,9 +3873,6 @@ elif page == "🃏 11.맞고(와플랫)":
 elif page == "👤 13.맞고(게스트)":
     st.markdown('<div class="section-header">👤 맞고 (게스트)</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("matgo_guest", weeks)
-    selected_biz = biz_selector("맞고게스트")
-    if selected_biz != "전체":
-        st.info("게스트 데이터는 지자체 계약 미연결 이용자로, 사업구분 필터가 적용되지 않습니다.")
     st.divider()
 
     # 집계형 시트에서 직접 가져오기
