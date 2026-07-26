@@ -1935,6 +1935,197 @@ elif page == "🧭 사업구분별 현황":
     st.caption("⚠ 복약관리·생활상담은 지자체별 원본 데이터가 없어 사업구분별 집계가 불가능해 표에서 제외했습니다. "
                "맞고(와플랫+게스트)·맞고(게스트)도 동일한 이유로 제외됩니다.")
 
+    st.markdown("")
+    st.markdown('<div class="section-header">📈 사업구분별 주차별 추이</div>', unsafe_allow_html=True)
+    _bt_start, _bt_end = page_week_range_selector("bizstatus_trend", weeks)
+    st.divider()
+
+    # 날짜 → 주차 매핑 (일별 데이터를 주차로 묶기 위함, weekly_users 시작일 기준 7일 전개)
+    _wu_bt = data.get("weekly_users", pd.DataFrame())
+    _daymap = {}
+    if not _wu_bt.empty and "주차" in _wu_bt.columns and "시작일" in _wu_bt.columns:
+        for _, _r in _wu_bt.iterrows():
+            _rs = pd.to_datetime(str(_r["시작일"]), errors="coerce")
+            if pd.isna(_rs):
+                continue
+            _wk = str(_r["주차"]).strip()
+            for _i in range(7):
+                _daymap[(_rs + pd.Timedelta(days=_i)).strftime("%Y-%m-%d")] = _wk
+
+    def _plot_biz_weekly(long_df, title, y_title, is_pct=True):
+        if long_df.empty:
+            st.info(f"{title} — 주차별 데이터가 없습니다.")
+            return
+        fig = go.Figure()
+        for _biz in _biz_list:
+            _bdf = long_df[long_df["사업구분"] == _biz]
+            if _bdf.empty:
+                continue
+            fig.add_trace(go.Scatter(
+                x=_bdf["주차"], y=_bdf["값"], mode="lines+markers", name=_biz,
+                line=dict(color=BUSINESS_TYPE_COLORS.get(_biz, "#666"), width=2.5),
+                marker=dict(size=6),
+                hovertemplate=f"<b>%{{x}}</b><br>{_biz}: %{{y:.1f}}{'%' if is_pct else ''}<extra></extra>",
+            ))
+        fig.update_layout(
+            title=title, height=420, hovermode="x unified",
+            xaxis=dict(type="category", tickangle=-45),
+            yaxis=dict(title=y_title),
+            legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="left", x=0, font=dict(size=11)),
+            margin=dict(t=40, b=100),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    _tab_gr, _tab_cr, _tab_cc, _tab_cd, _tab_st, _tab_hc, _tab_step = st.tabs(
+        ["가입률", "안부확인율", "안부체크율", "심혈관", "스트레스", "건강상담", "걸음수"]
+    )
+
+    with _tab_gr:
+        _wr = data.get("weekly_registered_by_mun", pd.DataFrame())
+        if not _wr.empty:
+            _wr_f = filter_by_week_range(_wr, "주차", _bt_start, _bt_end, weeks)
+            _wr_f = shorten_dates_in_df(_wr_f, "주차")
+            _rows_gr = []
+            for _biz in _biz_list:
+                _contract_total = biz_filter_df(_reg_all, _biz)["협약인원"].apply(safe_numeric).sum()
+                if _contract_total <= 0:
+                    continue
+                _b = biz_filter_df(_wr_f, _biz)
+                if _b.empty:
+                    continue
+                for _wk in pd.unique(_b["주차"]):
+                    _g = _b[_b["주차"] == _wk]
+                    _rows_gr.append({"주차": _wk, "사업구분": _biz,
+                                      "값": round(_g["가입완료"].apply(safe_numeric).sum() / _contract_total * 100, 1)})
+            _plot_biz_weekly(pd.DataFrame(_rows_gr), "사업구분별 주차별 가입률 추이", "가입률 (%)")
+            st.caption("※ 협약인원은 현재 시점 기준 고정값으로 계산했습니다 (주차별 협약인원 이력 데이터 없음).")
+        else:
+            st.info("주차별 가입 데이터가 없습니다.")
+
+    with _tab_cr:
+        _cw = data.get("checkin_mun_weekly", pd.DataFrame())
+        if not _cw.empty and "분자" in _cw.columns and "분모" in _cw.columns:
+            _cw2 = _cw.copy()
+            # 시작일이 일별 날짜이므로(주차 시작일이 아님) daymap으로 주차 매핑
+            _cw2["주차"] = _cw2["시작일"].astype(str).str.strip().map(_daymap)
+            _cw2 = _cw2.dropna(subset=["주차"])
+            _cw2 = filter_by_week_range(_cw2, "주차", _bt_start, _bt_end, weeks)
+            _cw2 = shorten_dates_in_df(_cw2, "주차")
+            _rows_cr = []
+            for _biz in _biz_list:
+                _b = biz_filter_df(_cw2, _biz)
+                if _b.empty:
+                    continue
+                for _wk in pd.unique(_b["주차"]):
+                    _g = _b[_b["주차"] == _wk]
+                    _den = _g["분모"].apply(safe_numeric).sum()
+                    _num = _g["분자"].apply(safe_numeric).sum()
+                    if _den > 0:
+                        _rows_cr.append({"주차": _wk, "사업구분": _biz, "값": round(_num / _den * 100, 1)})
+            _plot_biz_weekly(pd.DataFrame(_rows_cr), "사업구분별 주차별 안부확인율 추이", "안부확인율 (%)")
+        else:
+            st.info("주차별 안부확인율 데이터가 없습니다.")
+
+    with _tab_cc:
+        _ccr = _checkin_rate_all.copy() if not _checkin_rate_all.empty else pd.DataFrame()
+        if not _ccr.empty and "안부체크발송" in _ccr.columns and "안부체크응답" in _ccr.columns and "시작일" in _ccr.columns:
+            # 시작일이 일별 날짜이므로(주차 시작일이 아님) daymap으로 주차 매핑
+            _ccr["주차"] = _ccr["시작일"].astype(str).str.strip().map(_daymap)
+            _ccr = _ccr.dropna(subset=["주차"])
+            _ccr = filter_by_week_range(_ccr, "주차", _bt_start, _bt_end, weeks)
+            _ccr = shorten_dates_in_df(_ccr, "주차")
+            _rows_cc = []
+            for _biz in _biz_list:
+                _b = biz_filter_df(_ccr, _biz)
+                if _b.empty:
+                    continue
+                for _wk in pd.unique(_b["주차"]):
+                    _g = _b[_b["주차"] == _wk]
+                    _send = _g["안부체크발송"].apply(safe_numeric).sum()
+                    _resp = _g["안부체크응답"].apply(safe_numeric).sum()
+                    _off = _g["off대상자"].apply(safe_numeric).sum() if "off대상자" in _g.columns else 0
+                    _denom = _send - _off
+                    if _denom > 0:
+                        _rows_cc.append({"주차": _wk, "사업구분": _biz, "값": round(_resp / _denom * 100, 1)})
+            _plot_biz_weekly(pd.DataFrame(_rows_cc), "사업구분별 주차별 안부체크율 추이", "안부체크율 (%)")
+        else:
+            st.info("주차별 안부체크율 데이터가 없습니다.")
+
+    with _tab_cd:
+        _cardio_full = sheets.get("심혈관이용자", pd.DataFrame())
+        _c_wc = next((c for c in _cardio_full.columns if "주차" in str(c).replace("\n", "").strip()), None) if not _cardio_full.empty else None
+        if _c_wc:
+            _cf = filter_by_week_range(_cardio_full, _c_wc, _bt_start, _bt_end, weeks)
+            _cf = shorten_dates_in_df(_cf, _c_wc)
+            _rows_cd = []
+            for _biz in _biz_list:
+                _cnt, _ = biz_agg_raw(_cf, _biz, _c_wc)
+                if _cnt is None:
+                    continue
+                for _wk, _v in zip(_cf[_c_wc], _cnt):
+                    _rows_cd.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
+            _plot_biz_weekly(pd.DataFrame(_rows_cd), "사업구분별 주차별 심혈관 이용자수 추이", "이용자수 (명)", is_pct=False)
+        else:
+            st.info("심혈관 주차별 데이터가 없습니다.")
+
+    with _tab_st:
+        _stress_full = sheets.get("스트레스이용자", pd.DataFrame())
+        _s_wc = next((c for c in _stress_full.columns if "주차" in str(c).replace("\n", "").strip()), None) if not _stress_full.empty else None
+        if _s_wc:
+            _sf = filter_by_week_range(_stress_full, _s_wc, _bt_start, _bt_end, weeks)
+            _sf = shorten_dates_in_df(_sf, _s_wc)
+            _rows_st = []
+            for _biz in _biz_list:
+                _cnt, _ = biz_agg_raw(_sf, _biz, _s_wc)
+                if _cnt is None:
+                    continue
+                for _wk, _v in zip(_sf[_s_wc], _cnt):
+                    _rows_st.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
+            _plot_biz_weekly(pd.DataFrame(_rows_st), "사업구분별 주차별 스트레스 이용자수 추이", "이용자수 (명)", is_pct=False)
+        else:
+            st.info("스트레스 주차별 데이터가 없습니다.")
+
+    with _tab_hc:
+        if not _hc_all.empty and "합계" in _hc_all.columns and "날짜" in _hc_all.columns:
+            _hc2 = _hc_all.copy()
+            _hc2["주차"] = _hc2["날짜"].astype(str).str.strip().map(_daymap)
+            _hc2 = _hc2.dropna(subset=["주차"])
+            _hc2 = filter_by_week_range(_hc2, "주차", _bt_start, _bt_end, weeks)
+            _hc2 = shorten_dates_in_df(_hc2, "주차")
+            _rows_hc = []
+            for _biz in _biz_list:
+                _b = biz_filter_df(_hc2, _biz, col="지자체")
+                if _b.empty:
+                    continue
+                for _wk in pd.unique(_b["주차"]):
+                    _g = _b[_b["주차"] == _wk]
+                    _rows_hc.append({"주차": _wk, "사업구분": _biz, "값": round(_g["합계"].apply(safe_numeric).mean(), 1)})
+            _plot_biz_weekly(pd.DataFrame(_rows_hc), "사업구분별 주차별 건강상담 건수 추이 (일평균)", "건강상담 건수 (일평균)", is_pct=False)
+            st.caption("※ 건강상담은 일별 데이터라 각 주차 내 일평균값으로 계산했습니다.")
+        else:
+            st.info("건강상담 주차별 데이터가 없습니다.")
+
+    with _tab_step:
+        if not _steps_all.empty and "date" in _steps_all.columns and "memberCnt" in _steps_all.columns:
+            _st2 = _steps_all.copy()
+            _st2["_dstr"] = pd.to_datetime(_st2["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+            _st2["주차"] = _st2["_dstr"].map(_daymap)
+            _st2 = _st2.dropna(subset=["주차"])
+            _st2 = filter_by_week_range(_st2, "주차", _bt_start, _bt_end, weeks)
+            _st2 = shorten_dates_in_df(_st2, "주차")
+            _rows_step = []
+            for _biz in _biz_list:
+                _b = biz_filter_df(_st2, _biz, col="agencyName")
+                if _b.empty:
+                    continue
+                for _wk in pd.unique(_b["주차"]):
+                    _g = _b[_b["주차"] == _wk]
+                    _rows_step.append({"주차": _wk, "사업구분": _biz, "값": round(_g["memberCnt"].apply(safe_numeric).mean(), 1)})
+            _plot_biz_weekly(pd.DataFrame(_rows_step), "사업구분별 주차별 걸음수 참여자 추이 (일평균)", "참여자수 (일평균, 명)", is_pct=False)
+            st.caption("※ 걸음수는 일별 데이터라 각 주차 내 일평균값으로 계산했습니다.")
+        else:
+            st.info("걸음수 주차별 데이터가 없습니다.")
+
 
 # ============================================================
 # 👥 회원가입 & 이탈
