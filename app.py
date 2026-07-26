@@ -614,6 +614,7 @@ with st.sidebar:
         "페이지 선택",
         [
             "📋 Summary",
+            "🧭 사업구분별 현황",
             "👥 1.회원가입 & 이탈",
             "🖐 2.안부확인",
             "📊 3.안부체크율",
@@ -1799,6 +1800,134 @@ if page == "📋 Summary":
             heatmap_df = heatmap_df[heatmap_df["지자체명"].apply(_is_active_fuzzy)]
     else:
         st.info("사이드바에서 주차를 선택해주세요.")
+
+
+# ============================================================
+# 🧭 사업구분별 현황
+# ============================================================
+elif page == "🧭 사업구분별 현황":
+    st.markdown('<div class="section-header">🧭 사업구분별 현황</div>', unsafe_allow_html=True)
+    st.caption("사업구분별 핵심 지표를 한 화면에 모아 봅니다. (지표별로 가장 최신 데이터 기준)")
+    st.divider()
+
+    _biz_list = [b for b in BUSINESS_TYPE_ORDER if b in _ACTIVE_BIZ_TYPES]
+
+    def _latest_wide_row(sheet_key):
+        raw = sheets.get(sheet_key, pd.DataFrame())
+        if raw.empty:
+            return pd.DataFrame(), None
+        _wc = None
+        for c in raw.columns:
+            if "주차" in str(c).replace("\n", "").strip():
+                _wc = c
+                break
+        if _wc is None:
+            return pd.DataFrame(), None
+        return raw.iloc[[-1]], _wc
+
+    _reg_all = data.get("registration", pd.DataFrame())
+    _cr_direct_all = data.get("checkin_mun_rate_direct", pd.DataFrame())
+    _checkin_rate_all = data.get("checkin_municipality_rate", pd.DataFrame())
+    _cardio_row, _cardio_wc = _latest_wide_row("심혈관이용자")
+    _stress_row, _stress_wc = _latest_wide_row("스트레스이용자")
+    _hc_all = data.get("건강상담지자체", pd.DataFrame())
+    _steps_raw = sheets.get("걸음수현황", pd.DataFrame())
+    _STEPS_EXCLUDE = {"WAPLAT", "ai생활지원사테스트", "한전MCS"}
+    _steps_all = (_steps_raw[~_steps_raw["agencyName"].isin(_STEPS_EXCLUDE)].copy()
+                  if not _steps_raw.empty and "agencyName" in _steps_raw.columns else pd.DataFrame())
+
+    _rows = []
+    for _biz in _biz_list:
+        _row = {"사업구분": _biz}
+
+        _reg_b = biz_filter_df(_reg_all, _biz)
+        if not _reg_b.empty and "협약인원" in _reg_b.columns:
+            _contract = _reg_b["협약인원"].apply(safe_numeric).sum()
+            _registered = _reg_b["가입완료"].apply(safe_numeric).sum() if "가입완료" in _reg_b.columns else 0
+            _row["지자체수"] = _reg_b.loc[_reg_b["협약인원"].apply(safe_numeric) > 0, "지자체명"].nunique()
+            _row["이용자(협약)"] = int(_contract)
+            _row["가입률(%)"] = round(_registered / _contract * 100, 1) if _contract > 0 else 0.0
+        else:
+            _row["지자체수"], _row["이용자(협약)"], _row["가입률(%)"] = 0, 0, 0.0
+
+        _cr_b = biz_filter_df(_cr_direct_all, _biz)
+        if not _cr_b.empty and "분자" in _cr_b.columns and "분모" in _cr_b.columns:
+            _num = _cr_b["분자"].apply(safe_numeric).sum()
+            _den = _cr_b["분모"].apply(safe_numeric).sum()
+            _row["안부확인율(%)"] = round(_num / _den * 100, 1) if _den > 0 else 0.0
+        else:
+            _row["안부확인율(%)"] = None
+
+        _chk_b = biz_filter_df(_checkin_rate_all, _biz)
+        if not _chk_b.empty and "안부체크발송" in _chk_b.columns and "안부체크응답" in _chk_b.columns and "시작일" in _chk_b.columns:
+            _latest_date = _chk_b["시작일"].max()
+            _chk_latest = _chk_b[_chk_b["시작일"] == _latest_date]
+            _send = _chk_latest["안부체크발송"].apply(safe_numeric).sum()
+            _resp = _chk_latest["안부체크응답"].apply(safe_numeric).sum()
+            _off = _chk_latest["off대상자"].apply(safe_numeric).sum() if "off대상자" in _chk_latest.columns else 0
+            _denom = _send - _off
+            _row["안부체크율(%)"] = round(_resp / _denom * 100, 1) if _denom > 0 else 0.0
+        else:
+            _row["안부체크율(%)"] = None
+
+        if not _cardio_row.empty:
+            _c_cnt, _ = biz_agg_raw(_cardio_row, _biz, _cardio_wc)
+            _row["심혈관 이용자(명)"] = int(_c_cnt.iloc[0]) if _c_cnt is not None else None
+        else:
+            _row["심혈관 이용자(명)"] = None
+
+        if not _stress_row.empty:
+            _s_cnt, _ = biz_agg_raw(_stress_row, _biz, _stress_wc)
+            _row["스트레스 이용자(명)"] = int(_s_cnt.iloc[0]) if _s_cnt is not None else None
+        else:
+            _row["스트레스 이용자(명)"] = None
+
+        _hc_b = biz_filter_df(_hc_all, _biz, col="지자체")
+        if not _hc_b.empty and "합계" in _hc_b.columns and "날짜" in _hc_b.columns:
+            _recent_dates = sorted(_hc_b["날짜"].unique())[-7:]
+            _row["건강상담 건수(최근7일)"] = int(_hc_b.loc[_hc_b["날짜"].isin(_recent_dates), "합계"].apply(safe_numeric).sum())
+        else:
+            _row["건강상담 건수(최근7일)"] = None
+
+        _steps_b = biz_filter_df(_steps_all, _biz, col="agencyName")
+        if not _steps_b.empty and "date" in _steps_b.columns and "memberCnt" in _steps_b.columns:
+            _sd = pd.to_datetime(_steps_b["date"], errors="coerce")
+            _latest_sd = _sd.max()
+            _row["걸음수 참여자(명)"] = int(_steps_b.loc[_sd == _latest_sd, "memberCnt"].apply(safe_numeric).sum())
+        else:
+            _row["걸음수 참여자(명)"] = None
+
+        _rows.append(_row)
+
+    biz_status_df = pd.DataFrame(_rows)
+
+    def _fmt(v, suffix=""):
+        return "-" if v is None else f"{v:,}{suffix}" if isinstance(v, int) else f"{v}{suffix}"
+
+    for _, r in biz_status_df.iterrows():
+        _color = BUSINESS_TYPE_COLORS.get(r["사업구분"], "#666")
+        st.markdown(f"""<div style="border-left:6px solid {_color};background:#fff;border-radius:10px;
+            padding:14px 18px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="font-size:16px;font-weight:800;color:{_color};margin-bottom:8px">{r['사업구분']}
+                <span style="font-size:12px;font-weight:500;color:#6b7488"> · 지자체 {r['지자체수']}개 · 이용자(협약) {r['이용자(협약)']:,}명</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:22px;font-size:13px;color:#33394a">
+                <div>가입률 <b>{r['가입률(%)']}%</b></div>
+                <div>안부확인율 <b>{_fmt(r['안부확인율(%)'], '%')}</b></div>
+                <div>안부체크율 <b>{_fmt(r['안부체크율(%)'], '%')}</b></div>
+                <div>심혈관 이용자 <b>{_fmt(r['심혈관 이용자(명)'], '명')}</b></div>
+                <div>스트레스 이용자 <b>{_fmt(r['스트레스 이용자(명)'], '명')}</b></div>
+                <div>건강상담(최근7일) <b>{_fmt(r['건강상담 건수(최근7일)'], '건')}</b></div>
+                <div>걸음수 참여자 <b>{_fmt(r['걸음수 참여자(명)'], '명')}</b></div>
+            </div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("")
+    with st.expander("📋 표로 보기 (상세 데이터)", expanded=False):
+        st.dataframe(biz_status_df, use_container_width=True)
+
+    st.caption("⚠ 복약관리·생활상담은 지자체별 원본 데이터가 없어 사업구분별 집계가 불가능해 표에서 제외했습니다. "
+               "맞고(와플랫+게스트)·맞고(게스트)도 동일한 이유로 제외됩니다.")
 
 
 # ============================================================
