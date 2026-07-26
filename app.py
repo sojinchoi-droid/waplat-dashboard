@@ -513,8 +513,6 @@ def _compute_active_biz_types():
             pass
     return active if active else set(BUSINESS_TYPE_MAP.values())
 
-_ACTIVE_BIZ_TYPES: set = _compute_active_biz_types()
-
 # ============================================================
 # 상태 색상 / 배지
 # ============================================================
@@ -808,6 +806,10 @@ BUSINESS_TYPE_COLORS = {
     "통합돌봄": "#1565C0", "노인맞춤돌봄": "#2E7D32", "고독사예방": "#C62828",
     "취약지지원": "#E65100", "장애인지원": "#6A1B9A", "퇴원환자지원": "#00695C", "기타": "#757575",
 }
+
+# BUSINESS_TYPE_MAP이 최종 확정된 뒤에 계산해야 함 (그렇지 않으면 상단의 시트 기반
+# 임시 매핑 — 사업구분 표기가 시트 원본과 다를 수 있음 — 으로 오염됨)
+_ACTIVE_BIZ_TYPES: set = _compute_active_biz_types()
 
 # 지자체별 고유 색상 (20개+ 명확히 구분되는 색 — 권역 내에서도 차별화)
 MUNICIPALITY_COLORS = {
