@@ -1810,66 +1810,89 @@ if page == "📋 Summary":
 # ============================================================
 elif page == "🧭 사업구분별 현황":
     st.markdown('<div class="section-header">🧭 사업구분별 현황</div>', unsafe_allow_html=True)
-    st.caption("사업구분별 핵심 지표를 한 화면에 모아 봅니다. (지표별로 가장 최신 데이터 기준)")
     st.divider()
 
     _biz_list = [b for b in BUSINESS_TYPE_ORDER if b in _ACTIVE_BIZ_TYPES]
 
-    def _latest_wide_row(sheet_key):
-        raw = sheets.get(sheet_key, pd.DataFrame())
-        if raw.empty:
-            return pd.DataFrame(), None
-        _wc = None
-        for c in raw.columns:
-            if "주차" in str(c).replace("\n", "").strip():
-                _wc = c
-                break
-        if _wc is None:
-            return pd.DataFrame(), None
-        return raw.iloc[[-1]], _wc
+    # 날짜 → 주차 매핑 (일별 데이터를 주차로 묶기 위함, weekly_users 시작일 기준 7일 전개)
+    _wu_bt = data.get("weekly_users", pd.DataFrame())
+    _daymap = {}
+    if not _wu_bt.empty and "주차" in _wu_bt.columns and "시작일" in _wu_bt.columns:
+        for _, _r in _wu_bt.iterrows():
+            _rs = pd.to_datetime(str(_r["시작일"]), errors="coerce")
+            if pd.isna(_rs):
+                continue
+            _wk = str(_r["주차"]).strip()
+            for _i in range(7):
+                _daymap[(_rs + pd.Timedelta(days=_i)).strftime("%Y-%m-%d")] = _wk
+
+    _snap_week = selected_week if selected_week else (weeks[-1] if weeks else None)
+    st.markdown(f'<div class="section-header">📅 {_snap_week}주차 사업구분별 현황</div>' if _snap_week
+                else '<div class="section-header">사업구분별 현황</div>', unsafe_allow_html=True)
+    st.caption("사이드바에서 주차를 바꾸면 이 화면도 해당 주차 기준으로 바뀝니다.")
 
     _reg_all = data.get("registration", pd.DataFrame())
-    _cr_direct_all = data.get("checkin_mun_rate_direct", pd.DataFrame())
+    _wr_all = data.get("weekly_registered_by_mun", pd.DataFrame())
+    _cw_all = data.get("checkin_mun_weekly", pd.DataFrame())
     _checkin_rate_all = data.get("checkin_municipality_rate", pd.DataFrame())
-    _cardio_row, _cardio_wc = _latest_wide_row("심혈관이용자")
-    _stress_row, _stress_wc = _latest_wide_row("스트레스이용자")
     _hc_all = data.get("건강상담지자체", pd.DataFrame())
     _steps_raw = sheets.get("걸음수현황", pd.DataFrame())
     _STEPS_EXCLUDE = {"WAPLAT", "ai생활지원사테스트", "한전MCS"}
     _steps_all = (_steps_raw[~_steps_raw["agencyName"].isin(_STEPS_EXCLUDE)].copy()
                   if not _steps_raw.empty and "agencyName" in _steps_raw.columns else pd.DataFrame())
 
+    def _wide_week_row(sheet_key, wk):
+        raw = sheets.get(sheet_key, pd.DataFrame())
+        if raw.empty:
+            return pd.DataFrame(), None
+        _wc = next((c for c in raw.columns if "주차" in str(c).replace("\n", "").strip()), None)
+        if _wc is None:
+            return pd.DataFrame(), None
+        return raw[raw[_wc].astype(str).str.strip() == str(wk).strip()], _wc
+
+    _cardio_row, _cardio_wc = _wide_week_row("심혈관이용자", _snap_week)
+    _stress_row, _stress_wc = _wide_week_row("스트레스이용자", _snap_week)
+
     _rows = []
     for _biz in _biz_list:
         _row = {"사업구분": _biz}
 
         _reg_b = biz_filter_df(_reg_all, _biz)
-        if not _reg_b.empty and "협약인원" in _reg_b.columns:
-            _contract = _reg_b["협약인원"].apply(safe_numeric).sum()
-            _registered = _reg_b["가입완료"].apply(safe_numeric).sum() if "가입완료" in _reg_b.columns else 0
-            _row["지자체수"] = _reg_b.loc[_reg_b["협약인원"].apply(safe_numeric) > 0, "지자체명"].nunique()
-            _row["이용자(협약)"] = int(_contract)
-            _row["가입률(%)"] = round(_registered / _contract * 100, 1) if _contract > 0 else 0.0
-        else:
-            _row["지자체수"], _row["이용자(협약)"], _row["가입률(%)"] = 0, 0, 0.0
+        _contract = _reg_b["협약인원"].apply(safe_numeric).sum() if not _reg_b.empty else 0
+        _row["지자체수"] = _reg_b.loc[_reg_b["협약인원"].apply(safe_numeric) > 0, "지자체명"].nunique() if not _reg_b.empty else 0
+        _row["이용자(협약)"] = int(_contract)
 
-        _cr_b = biz_filter_df(_cr_direct_all, _biz)
-        if not _cr_b.empty and "분자" in _cr_b.columns and "분모" in _cr_b.columns:
-            _num = _cr_b["분자"].apply(safe_numeric).sum()
-            _den = _cr_b["분모"].apply(safe_numeric).sum()
-            _row["안부확인율(%)"] = round(_num / _den * 100, 1) if _den > 0 else 0.0
+        # 가입률 — 해당 주차 가입완료 ÷ 현재 협약인원(고정)
+        _wr_b = biz_filter_df(_wr_all, _biz)
+        _wr_wk = _wr_b[_wr_b["주차"].astype(str).str.strip() == str(_snap_week).strip()] if not _wr_b.empty else pd.DataFrame()
+        if not _wr_wk.empty and _contract > 0:
+            _row["가입률(%)"] = round(_wr_wk["가입완료"].apply(safe_numeric).sum() / _contract * 100, 1)
+        else:
+            _row["가입률(%)"] = None
+
+        # 안부확인율 — 해당 주차 분자/분모 합산
+        _cw_b = biz_filter_df(_cw_all, _biz)
+        if not _cw_b.empty:
+            _cw_b2 = _cw_b.copy()
+            _cw_b2["_wk"] = _cw_b2["시작일"].astype(str).str.strip().map(_daymap)
+            _cw_wk = _cw_b2[_cw_b2["_wk"] == _snap_week]
+            _den = _cw_wk["분모"].apply(safe_numeric).sum()
+            _num = _cw_wk["분자"].apply(safe_numeric).sum()
+            _row["안부확인율(%)"] = round(_num / _den * 100, 1) if _den > 0 else None
         else:
             _row["안부확인율(%)"] = None
 
+        # 안부체크율 — 해당 주차 발송/응답 합산
         _chk_b = biz_filter_df(_checkin_rate_all, _biz)
-        if not _chk_b.empty and "안부체크발송" in _chk_b.columns and "안부체크응답" in _chk_b.columns and "시작일" in _chk_b.columns:
-            _latest_date = _chk_b["시작일"].max()
-            _chk_latest = _chk_b[_chk_b["시작일"] == _latest_date]
-            _send = _chk_latest["안부체크발송"].apply(safe_numeric).sum()
-            _resp = _chk_latest["안부체크응답"].apply(safe_numeric).sum()
-            _off = _chk_latest["off대상자"].apply(safe_numeric).sum() if "off대상자" in _chk_latest.columns else 0
+        if not _chk_b.empty and "안부체크발송" in _chk_b.columns:
+            _chk_b2 = _chk_b.copy()
+            _chk_b2["_wk"] = _chk_b2["시작일"].astype(str).str.strip().map(_daymap)
+            _chk_wk = _chk_b2[_chk_b2["_wk"] == _snap_week]
+            _send = _chk_wk["안부체크발송"].apply(safe_numeric).sum()
+            _resp = _chk_wk["안부체크응답"].apply(safe_numeric).sum()
+            _off = _chk_wk["off대상자"].apply(safe_numeric).sum() if "off대상자" in _chk_wk.columns else 0
             _denom = _send - _off
-            _row["안부체크율(%)"] = round(_resp / _denom * 100, 1) if _denom > 0 else 0.0
+            _row["안부체크율(%)"] = round(_resp / _denom * 100, 1) if _denom > 0 else None
         else:
             _row["안부체크율(%)"] = None
 
@@ -1885,18 +1908,24 @@ elif page == "🧭 사업구분별 현황":
         else:
             _row["스트레스 이용자(명)"] = None
 
+        # 건강상담 — 해당 주차 일평균
         _hc_b = biz_filter_df(_hc_all, _biz, col="지자체")
-        if not _hc_b.empty and "합계" in _hc_b.columns and "날짜" in _hc_b.columns:
-            _recent_dates = sorted(_hc_b["날짜"].unique())[-7:]
-            _row["건강상담 건수(최근7일)"] = int(_hc_b.loc[_hc_b["날짜"].isin(_recent_dates), "합계"].apply(safe_numeric).sum())
+        if not _hc_b.empty and "합계" in _hc_b.columns:
+            _hc_b2 = _hc_b.copy()
+            _hc_b2["_wk"] = _hc_b2["날짜"].astype(str).str.strip().map(_daymap)
+            _hc_wk = _hc_b2[_hc_b2["_wk"] == _snap_week]
+            _row["건강상담 건수(일평균)"] = round(_hc_wk["합계"].apply(safe_numeric).mean(), 1) if not _hc_wk.empty else None
         else:
-            _row["건강상담 건수(최근7일)"] = None
+            _row["건강상담 건수(일평균)"] = None
 
+        # 걸음수 — 해당 주차 일평균
         _steps_b = biz_filter_df(_steps_all, _biz, col="agencyName")
-        if not _steps_b.empty and "date" in _steps_b.columns and "memberCnt" in _steps_b.columns:
-            _sd = pd.to_datetime(_steps_b["date"], errors="coerce")
-            _latest_sd = _sd.max()
-            _row["걸음수 참여자(명)"] = int(_steps_b.loc[_sd == _latest_sd, "memberCnt"].apply(safe_numeric).sum())
+        if not _steps_b.empty and "date" in _steps_b.columns:
+            _steps_b2 = _steps_b.copy()
+            _steps_b2["_dstr"] = pd.to_datetime(_steps_b2["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+            _steps_b2["_wk"] = _steps_b2["_dstr"].map(_daymap)
+            _steps_wk = _steps_b2[_steps_b2["_wk"] == _snap_week]
+            _row["걸음수 참여자(명)"] = round(_steps_wk["memberCnt"].apply(safe_numeric).mean(), 1) if not _steps_wk.empty else None
         else:
             _row["걸음수 참여자(명)"] = None
 
@@ -1919,12 +1948,12 @@ elif page == "🧭 사업구분별 현황":
                 <span style="font-size:12px;font-weight:500;color:#6b7488"> · 지자체 {r['지자체수']}개 · 이용자(협약) {r['이용자(협약)']:,}명</span>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:22px;font-size:13px;color:#33394a">
-                <div>가입률 <b>{r['가입률(%)']}%</b></div>
+                <div>가입률 <b>{_fmt(r['가입률(%)'], '%')}</b></div>
                 <div>안부확인율 <b>{_fmt(r['안부확인율(%)'], '%')}</b></div>
                 <div>안부체크율 <b>{_fmt(r['안부체크율(%)'], '%')}</b></div>
                 <div>심혈관 이용자 <b>{_fmt(r['심혈관 이용자(명)'], '명')}</b></div>
                 <div>스트레스 이용자 <b>{_fmt(r['스트레스 이용자(명)'], '명')}</b></div>
-                <div>건강상담(최근7일) <b>{_fmt(r['건강상담 건수(최근7일)'], '건')}</b></div>
+                <div>건강상담(일평균) <b>{_fmt(r['건강상담 건수(일평균)'], '건')}</b></div>
                 <div>걸음수 참여자 <b>{_fmt(r['걸음수 참여자(명)'], '명')}</b></div>
             </div>
         </div>""", unsafe_allow_html=True)
@@ -1940,18 +1969,6 @@ elif page == "🧭 사업구분별 현황":
     st.markdown('<div class="section-header">📈 사업구분별 주차별 추이</div>', unsafe_allow_html=True)
     _bt_start, _bt_end = page_week_range_selector("bizstatus_trend", weeks)
     st.divider()
-
-    # 날짜 → 주차 매핑 (일별 데이터를 주차로 묶기 위함, weekly_users 시작일 기준 7일 전개)
-    _wu_bt = data.get("weekly_users", pd.DataFrame())
-    _daymap = {}
-    if not _wu_bt.empty and "주차" in _wu_bt.columns and "시작일" in _wu_bt.columns:
-        for _, _r in _wu_bt.iterrows():
-            _rs = pd.to_datetime(str(_r["시작일"]), errors="coerce")
-            if pd.isna(_rs):
-                continue
-            _wk = str(_r["주차"]).strip()
-            for _i in range(7):
-                _daymap[(_rs + pd.Timedelta(days=_i)).strftime("%Y-%m-%d")] = _wk
 
     def _plot_biz_weekly(long_df, title, y_title, is_pct=True):
         if long_df.empty:
