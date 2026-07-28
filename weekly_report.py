@@ -307,7 +307,7 @@ def build_section(title, this_rate, prev_rate, this_by_mun, prev_by_mun, thresho
 
 def main():
     parser = argparse.ArgumentParser(description="주간 운영 변동 리포트")
-    parser.add_argument("--threshold", type=float, default=5.0, help="%%p 변화 임계값 (기본 5)")
+    parser.add_argument("--threshold", type=float, default=2.0, help="%%p 변화 임계값 (기본 2)")
     parser.add_argument("--count-threshold", type=float, default=0.0,
                          help="이용자수/참여자수 등 절대건수 지표의 변화 임계값 (기본: 자동, 이용자수 합의 10%%)")
     parser.add_argument("--out", type=str, default=None, help="결과를 저장할 마크다운 파일 경로")
@@ -444,7 +444,7 @@ def main():
         hc_long = load_daily_avg(hc, "날짜", "지자체", "합계", daymap)
         this_hc = avg_by_mun_week(hc_long, this_week)
         prev_hc = avg_by_mun_week(hc_long, prev_week)
-        sec = build_count_section("건강상담", this_hc, prev_hc, "건", max(args.count_threshold, 0.3))
+        sec = build_count_section("건강상담", this_hc, prev_hc, "건", max(args.count_threshold, 0.1))
         if sec:
             sections.append(sec)
 
@@ -457,7 +457,7 @@ def main():
         steps_long = load_daily_avg(steps, "_date", "agencyName", "memberCnt", daymap)
         this_st = avg_by_mun_week(steps_long, this_week)
         prev_st = avg_by_mun_week(steps_long, prev_week)
-        sec = build_count_section("걸음수", this_st, prev_st, "명", max(args.count_threshold, 1.0))
+        sec = build_count_section("걸음수", this_st, prev_st, "명", max(args.count_threshold, 0.5))
         if sec:
             sections.append(sec)
 
