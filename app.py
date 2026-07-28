@@ -1858,8 +1858,10 @@ elif page == "🧭 사업구분별 현황":
         _row = {"사업구분": _biz}
 
         _reg_b = biz_filter_df(_reg_all, _biz)
+        _active_reg_b = _reg_b.loc[_reg_b["협약인원"].apply(safe_numeric) > 0] if not _reg_b.empty else _reg_b
         _contract = _reg_b["협약인원"].apply(safe_numeric).sum() if not _reg_b.empty else 0
-        _row["지자체수"] = _reg_b.loc[_reg_b["협약인원"].apply(safe_numeric) > 0, "지자체명"].nunique() if not _reg_b.empty else 0
+        _row["지자체수"] = _active_reg_b["지자체명"].nunique() if not _active_reg_b.empty else 0
+        _row["지자체명목록"] = ", ".join(sorted(_active_reg_b["지자체명"].astype(str).str.strip().unique())) if not _active_reg_b.empty else ""
         _row["이용자(협약)"] = int(_contract)
 
         # 가입률 — 해당 주차 가입완료 ÷ 현재 협약인원(고정)
@@ -1965,6 +1967,7 @@ elif page == "🧭 사업구분별 현황":
                 <div>건강상담(일평균) <b>{_fmt(r['건강상담 건수(일평균)'], '건')}</b></div>
                 <div>걸음수 참여자 <b>{_fmt(r['걸음수 참여자(명)'], '명')}</b></div>
             </div>
+            <div style="margin-top:8px;font-size:12px;color:#8a94a8">{r['지자체명목록']}</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("")
