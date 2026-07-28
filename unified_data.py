@@ -215,6 +215,52 @@ def save_agency(agency_name: str, service_model: str,
         return False
 
 
+# (지자체명, 서비스모델, 계약시작일(모르면 None), 대상인원(모르면 None), 메모)
+_AGENCY_CORRECTIONS = [
+    ("동해시청", "safe", None, None, "이용자 추가 필요 (추가예정)"),
+    ("인천사회서비스원", "safe", None, None, "7/29 이용자 등록 (추가예정)"),
+    ("충주시청", "safe", "2026-09-01", 0, "9월 시작 예정 (정확한 시작일 미정)"),
+    ("경주시청", "safe", "2026-08-01", 0, "8월 시작 예정 (정확한 시작일 미정)"),
+]
+
+
+def apply_agency_corrections() -> int:
+    """알려둔 최신 계약 정보(메모/시작일)를 agency_master에 반영.
+    이미 등록된 지자체는 메모/필요시 시작일만 갱신, 없으면 새로 등록.
+    여러 번 실행해도 안전(idempotent) — 앱 시작 시마다 호출해도 무방.
+    Returns: 처리된 건수
+    """
+    conn = get_connection()
+    count = 0
+    try:
+        for name, model, start, users, memo in _AGENCY_CORRECTIONS:
+            row = conn.execute(
+                "SELECT id, contract_start, target_users FROM agency_master "
+                "WHERE agency_name = ? ORDER BY contract_start DESC LIMIT 1",
+                (name,)
+            ).fetchone()
+            if row:
+                _id, existing_start, existing_users = row
+                new_start = start or existing_start
+                new_users = users if users is not None else existing_users
+                conn.execute(
+                    "UPDATE agency_master SET contract_start = ?, target_users = ?, memo = ?, "
+                    "updated_at = datetime('now', 'localtime') WHERE id = ?",
+                    (new_start, new_users, memo, _id)
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO agency_master (agency_name, service_model, contract_start, "
+                    "contract_end, target_users, memo) VALUES (?, ?, ?, '', ?, ?)",
+                    (name, model, start or "2026-07-01", users or 0, memo)
+                )
+            count += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return count
+
+
 def toggle_agency_active(agency_id: int, is_active: bool) -> bool:
     """지자체 활성/비활성 전환"""
     conn = get_connection()

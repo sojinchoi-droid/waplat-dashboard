@@ -34,7 +34,7 @@ from unified_data import (
     load_unified_data, get_agency_master, save_agency,
     toggle_agency_active, get_agency_summary, get_data_source_info,
     get_db_data, seed_agencies_from_sheets, get_active_agencies,
-    import_safety_check_from_sheets,
+    import_safety_check_from_sheets, apply_agency_corrections,
 )
 from data_input import DATA_TYPES, process_pasted_data, detect_data_type
 from local_db import (
@@ -473,6 +473,8 @@ try:
         imported = import_safety_check_from_sheets(sheets)
         if imported > 0:
             st.toast(f"안부확인 raw 데이터 {imported}건 임포트됨")
+        # 계약 시작 알림에 반영할 최신 정보 보정 (동해시청/인천사회서비스원 메모, 충주/경주시청 신규)
+        apply_agency_corrections()
         st.session_state["agency_seeded"] = True
 except Exception as e:
     st.error(f"데이터 로딩 실패: {e}")
