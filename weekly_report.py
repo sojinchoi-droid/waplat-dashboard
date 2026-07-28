@@ -319,11 +319,31 @@ def build_section(title, this_rate, prev_rate, this_by_mun, prev_by_mun, thresho
     return f"[{title}]\n" + "\n".join(paras)
 
 
+def build_dense_section(title, unit, overall_cur, overall_prev, this_rate, prev_rate, biz_list):
+    """보고용 — 필터링 없이 전체 + 사업구분별 전주 대비를 빽빽하게 나열."""
+    diff_unit = "%p" if unit == "%" else unit
+    lines = [f"[{title}]"]
+    if overall_cur is not None and overall_prev is not None:
+        d = round(overall_cur - overall_prev, 1)
+        lines.append(f"전체: {overall_prev}{unit} → {overall_cur}{unit} ({fmt_diff(d, diff_unit)})")
+    for biz in biz_list:
+        cur, prev = this_rate.get(biz), prev_rate.get(biz)
+        if cur is None or prev is None:
+            lines.append(f"  · {biz}: 데이터 없음")
+            continue
+        d = round(cur - prev, 1)
+        lines.append(f"  · {biz}: {prev}{unit} → {cur}{unit} ({fmt_diff(d, diff_unit)})")
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description="주간 운영 변동 리포트")
-    parser.add_argument("--threshold", type=float, default=5.0, help="%%p 변화 임계값 (기본 5, 특이사항만 추려서 보기)")
+    parser.add_argument("--mode", choices=["dense", "notable"], default="dense",
+                         help="dense=페이지별 전체+사업구분별 전주대비 전부 표시(기본, 보고용) / "
+                              "notable=임계값 넘는 특이사항만 문장으로 설명")
+    parser.add_argument("--threshold", type=float, default=5.0, help="%%p 변화 임계값 (notable 모드에서만 사용, 기본 5)")
     parser.add_argument("--count-threshold", type=float, default=0.0,
-                         help="이용자수/참여자수 등 절대건수 지표의 변화 임계값 (기본: 자동, 이용자수 합의 10%%)")
+                         help="이용자수/참여자수 등 절대건수 지표의 변화 임계값 (notable 모드, 기본: 자동)")
     parser.add_argument("--out", type=str, default=None, help="결과를 저장할 마크다운 파일 경로")
     args = parser.parse_args()
 
@@ -376,6 +396,15 @@ def main():
         verb, direction = _direction(diff) if diff != 0 else ("변동 없었습니다", "유지")
         overall_lines.append(f"{label} {prev}%에서 {cur}%로 {verb}" if diff != 0 else f"{label} {cur}%로 {verb}")
 
+    def _emit(title, unit, cur_overall, prev_overall, this_rate, prev_rate, this_detail, prev_detail, as_rate):
+        if args.mode == "dense":
+            sections.append(build_dense_section(title, unit, cur_overall, prev_overall, this_rate, prev_rate, biz_list))
+        else:
+            sec = build_section(title, this_rate, prev_rate, this_detail, prev_detail, args.threshold,
+                                 as_rate=as_rate, biz_list=biz_list)
+            if sec:
+                sections.append(sec)
+
     # ── 1) 가입률 ──────────────────────────────────────────
     jn = load_join_count(data)
     if not jn.empty:
@@ -391,9 +420,7 @@ def main():
         cur_overall = round(sum(this_j.values()) / total_contract * 100, 1) if total_contract > 0 else None
         prev_overall = round(sum(prev_j.values()) / total_contract * 100, 1) if total_contract > 0 else None
         _overall_note("전체 가입률", cur_overall, prev_overall)
-        sec = build_section("가입률", this_rate, prev_rate, this_j, prev_j, args.threshold, as_rate=False, biz_list=biz_list)
-        if sec:
-            sections.append(sec)
+        _emit("가입률", "%", cur_overall, prev_overall, this_rate, prev_rate, this_j, prev_j, as_rate=False)
 
     # ── 2) 안부확인율 ──────────────────────────────────────
     cc = load_checkin_confirm(data, daymap)
@@ -402,10 +429,10 @@ def main():
         prev_num_den = rate_by_mun_week(cc, "분자", "분모", prev_week)
         this_rate = rate_dict(biz_group(this_num_den))
         prev_rate = rate_dict(biz_group(prev_num_den))
-        _overall_note("전체 안부확인율", _overall_rate(this_num_den), _overall_rate(prev_num_den))
-        sec = build_section("안부확인율", this_rate, prev_rate, this_num_den, prev_num_den, args.threshold, biz_list=biz_list)
-        if sec:
-            sections.append(sec)
+        cur_overall = _overall_rate(this_num_den)
+        prev_overall = _overall_rate(prev_num_den)
+        _overall_note("전체 안부확인율", cur_overall, prev_overall)
+        _emit("안부확인율", "%", cur_overall, prev_overall, this_rate, prev_rate, this_num_den, prev_num_den, as_rate=True)
 
     # ── 3) 안부체크율 ──────────────────────────────────────
     cr = load_checkin_rate(data, daymap)
@@ -426,10 +453,10 @@ def main():
         prev_num_den = _to_num_den(prev_send, prev_off)
         this_rate = rate_dict(biz_group(this_num_den))
         prev_rate = rate_dict(biz_group(prev_num_den))
-        _overall_note("전체 안부체크율", _overall_rate(this_num_den), _overall_rate(prev_num_den))
-        sec = build_section("안부체크율", this_rate, prev_rate, this_num_den, prev_num_den, args.threshold, biz_list=biz_list)
-        if sec:
-            sections.append(sec)
+        cur_overall = _overall_rate(this_num_den)
+        prev_overall = _overall_rate(prev_num_den)
+        _overall_note("전체 안부체크율", cur_overall, prev_overall)
+        _emit("안부체크율", "%", cur_overall, prev_overall, this_rate, prev_rate, this_num_den, prev_num_den, as_rate=True)
 
     # ── 4) 심혈관 / 5) 스트레스 이용비중 ─────────────────────
     for label, sheet_key in [("심혈관", "심혈관이용자"), ("스트레스", "스트레스이용자")]:
@@ -448,13 +475,15 @@ def main():
         cur_overall = round(sum(this_cnt.values()) / total_completed * 100, 1) if total_completed > 0 else None
         prev_overall = round(sum(prev_cnt.values()) / total_completed * 100, 1) if total_completed > 0 else None
         _overall_note(f"전체 {label} 이용비중", cur_overall, prev_overall)
-        sec = build_section(f"{label} 이용비중", this_rate, prev_rate, this_cnt, prev_cnt, args.threshold, as_rate=False, biz_list=biz_list)
-        if sec:
-            sections.append(sec)
+        _emit(f"{label} 이용비중", "%", cur_overall, prev_overall, this_rate, prev_rate, this_cnt, prev_cnt, as_rate=False)
 
     def build_count_section(title, this_by_mun, prev_by_mun, unit, min_diff):
         this_biz = {b: round(v, 1) for b, v in biz_group(this_by_mun).items()}
         prev_biz = {b: round(v, 1) for b, v in biz_group(prev_by_mun).items()}
+        if args.mode == "dense":
+            cur_overall = round(sum(this_by_mun.values()), 1) if this_by_mun else None
+            prev_overall = round(sum(prev_by_mun.values()), 1) if prev_by_mun else None
+            return build_dense_section(f"{title} (일평균)", unit, cur_overall, prev_overall, this_biz, prev_biz, biz_list)
         paras = []
         for b in biz_list:
             cur, prev = this_biz.get(b), prev_biz.get(b)
@@ -516,29 +545,34 @@ def main():
             s = s[s[col] > 0].sort_values(date_col)
             if len(s) < 2:
                 continue
-            cur, prev = s[col].iloc[-1], s[col].iloc[-2]
+            cur, prev = round(s[col].iloc[-1], 1), round(s[col].iloc[-2], 1)
             diff = round(cur - prev, 1)
-            _overall_note(f"전체 {label}", round(cur, 1), round(prev, 1))
-            if abs(diff) >= args.threshold:
+            _overall_note(f"전체 {label}", cur, prev)
+            if args.mode == "dense":
+                kt_paras.append(f"  · {label}: {prev}% → {cur}% ({fmt_diff(diff, '%p')})")
+            elif abs(diff) >= args.threshold:
                 verb, direction = _direction(diff)
                 kt_paras.append(f"■ {label}: 전주 {prev}%에서 이번 주 {cur}%로 {abs(diff)}%p {verb} ({direction}). "
                                  f"세이프 전체 기준 수치라 지자체별 기여도는 따로 안 나옵니다.")
         if kt_paras:
-            sections.append("[KT 관제 현황 (세이프 전용)]\n" + "\n".join(kt_paras))
+            title = "KT 관제 현황 (세이프 전용, 전사 기준 — 지자체별 분리 불가)" if args.mode == "dense" else "KT 관제 현황 (세이프 전용)"
+            sections.append(f"[{title}]\n" + "\n".join(kt_paras))
 
     # ── 리포트 출력 ────────────────────────────────────────
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     header = f"주간 운영 변동 리포트 ({prev_week}주차 → {this_week}주차, 생성 {now})\n"
 
-    overall_para = "이번 주 전체 현황: " + ", ".join(overall_lines) + "." if overall_lines else "전체 현황 데이터가 부족합니다."
-    overall_section = "[전체 현황]\n" + overall_para
-
-    if sections:
-        notable_section = f"[특이사항 — 사업구분별 ±{args.threshold}%p 이상 변동]\n" + "\n\n".join(sections)
+    if args.mode == "dense":
+        body = "\n\n".join(sections) if sections else "표시할 데이터가 없습니다."
+        report = header + "\n" + body + "\n"
     else:
-        notable_section = f"[특이사항]\n임계값(±{args.threshold}%p) 이상으로 움직인 지표가 없습니다. 사업구분 단위로는 특별히 짚을 변화가 없었던 한 주입니다."
-
-    report = header + "\n" + overall_section + "\n\n" + notable_section + "\n"
+        overall_para = "이번 주 전체 현황: " + ", ".join(overall_lines) + "." if overall_lines else "전체 현황 데이터가 부족합니다."
+        overall_section = "[전체 현황]\n" + overall_para
+        if sections:
+            notable_section = f"[특이사항 — 사업구분별 ±{args.threshold}%p 이상 변동]\n" + "\n\n".join(sections)
+        else:
+            notable_section = f"[특이사항]\n임계값(±{args.threshold}%p) 이상으로 움직인 지표가 없습니다. 사업구분 단위로는 특별히 짚을 변화가 없었던 한 주입니다."
+        report = header + "\n" + overall_section + "\n\n" + notable_section + "\n"
 
     print(report)
     if args.out:
