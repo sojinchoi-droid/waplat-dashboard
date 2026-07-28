@@ -1860,6 +1860,7 @@ elif page == "🧭 사업구분별 현황":
         _reg_b = biz_filter_df(_reg_all, _biz)
         _active_reg_b = _reg_b.loc[_reg_b["협약인원"].apply(safe_numeric) > 0] if not _reg_b.empty else _reg_b
         _contract = _reg_b["협약인원"].apply(safe_numeric).sum() if not _reg_b.empty else 0
+        _reg_completed = _reg_b["가입완료"].apply(safe_numeric).sum() if not _reg_b.empty and "가입완료" in _reg_b.columns else 0
         _row["지자체수"] = _active_reg_b["지자체명"].nunique() if not _active_reg_b.empty else 0
         _row["지자체명목록"] = ", ".join(sorted(_active_reg_b["지자체명"].astype(str).str.strip().unique())) if not _active_reg_b.empty else ""
         _row["이용자(협약)"] = int(_contract)
@@ -1903,18 +1904,21 @@ elif page == "🧭 사업구분별 현황":
         else:
             _row["안부체크율(%)"] = None
 
+        # 심혈관/스트레스 이용비중 — 시트에 내장된 비율 대신 직접 계산 (이용자수 ÷ 가입완료)
         if not _cardio_row.empty:
-            _c_cnt, _c_rat = biz_agg_raw(_cardio_row, _biz, _cardio_wc)
+            _c_cnt, _ = biz_agg_raw(_cardio_row, _biz, _cardio_wc)
             _row["심혈관 이용자(명)"] = int(_c_cnt.iloc[0]) if _c_cnt is not None else None
-            _row["심혈관 이용비중(%)"] = round(float(_c_rat.iloc[0]), 1) if _c_rat is not None else None
+            _row["심혈관 이용비중(%)"] = (round(_c_cnt.iloc[0] / _reg_completed * 100, 1)
+                                    if _c_cnt is not None and _reg_completed > 0 else None)
         else:
             _row["심혈관 이용자(명)"] = None
             _row["심혈관 이용비중(%)"] = None
 
         if not _stress_row.empty:
-            _s_cnt, _s_rat = biz_agg_raw(_stress_row, _biz, _stress_wc)
+            _s_cnt, _ = biz_agg_raw(_stress_row, _biz, _stress_wc)
             _row["스트레스 이용자(명)"] = int(_s_cnt.iloc[0]) if _s_cnt is not None else None
-            _row["스트레스 이용비중(%)"] = round(float(_s_rat.iloc[0]), 1) if _s_rat is not None else None
+            _row["스트레스 이용비중(%)"] = (round(_s_cnt.iloc[0] / _reg_completed * 100, 1)
+                                    if _s_cnt is not None and _reg_completed > 0 else None)
         else:
             _row["스트레스 이용자(명)"] = None
             _row["스트레스 이용비중(%)"] = None
@@ -2091,17 +2095,19 @@ elif page == "🧭 사업구분별 현황":
             _cf = shorten_dates_in_df(_cf, _c_wc)
             _rows_cd, _rows_cd_r = [], []
             for _biz in _biz_list:
-                _cnt, _rat = biz_agg_raw(_cf, _biz, _c_wc)
+                _cnt, _ = biz_agg_raw(_cf, _biz, _c_wc)
                 if _cnt is None:
                     continue
                 for _wk, _v in zip(_cf[_c_wc], _cnt):
                     _rows_cd.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
-                if _rat is not None:
-                    for _wk, _v in zip(_cf[_c_wc], _rat):
-                        _rows_cd_r.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
+                # 시트 내장 이용비중 대신 이용자수 ÷ 가입완료(registration)로 직접 계산
+                _biz_completed = biz_filter_df(_reg_all, _biz)["가입완료"].apply(safe_numeric).sum()
+                if _biz_completed > 0:
+                    for _wk, _v in zip(_cf[_c_wc], _cnt):
+                        _rows_cd_r.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v) / _biz_completed * 100, 1)})
             _plot_biz_weekly(pd.DataFrame(_rows_cd), "사업구분별 주차별 심혈관 이용자수 추이", "이용자수 (명)", is_pct=False)
             _plot_biz_weekly(pd.DataFrame(_rows_cd_r), "사업구분별 주차별 심혈관 이용비중 추이", "이용비중 (%)")
-            st.caption("※ 이용비중 = 심혈관 이용자수 ÷ 해당 지자체 가입인원 × 100")
+            st.caption("※ 이용비중 = 심혈관 이용자수 ÷ 가입완료 인원(registration, 현재 시점 고정값) × 100")
         else:
             st.info("심혈관 주차별 데이터가 없습니다.")
 
@@ -2113,17 +2119,18 @@ elif page == "🧭 사업구분별 현황":
             _sf = shorten_dates_in_df(_sf, _s_wc)
             _rows_st, _rows_st_r = [], []
             for _biz in _biz_list:
-                _cnt, _rat = biz_agg_raw(_sf, _biz, _s_wc)
+                _cnt, _ = biz_agg_raw(_sf, _biz, _s_wc)
                 if _cnt is None:
                     continue
                 for _wk, _v in zip(_sf[_s_wc], _cnt):
                     _rows_st.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
-                if _rat is not None:
-                    for _wk, _v in zip(_sf[_s_wc], _rat):
-                        _rows_st_r.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
+                _biz_completed = biz_filter_df(_reg_all, _biz)["가입완료"].apply(safe_numeric).sum()
+                if _biz_completed > 0:
+                    for _wk, _v in zip(_sf[_s_wc], _cnt):
+                        _rows_st_r.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v) / _biz_completed * 100, 1)})
             _plot_biz_weekly(pd.DataFrame(_rows_st), "사업구분별 주차별 스트레스 이용자수 추이", "이용자수 (명)", is_pct=False)
             _plot_biz_weekly(pd.DataFrame(_rows_st_r), "사업구분별 주차별 스트레스 이용비중 추이", "이용비중 (%)")
-            st.caption("※ 이용비중 = 스트레스 이용자수 ÷ 해당 지자체 가입인원 × 100")
+            st.caption("※ 이용비중 = 스트레스 이용자수 ÷ 가입완료 인원(registration, 현재 시점 고정값) × 100")
         else:
             st.info("스트레스 주차별 데이터가 없습니다.")
 
