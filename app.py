@@ -3381,13 +3381,15 @@ elif page == "❤ 6.심혈관체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_cnt, _biz_rat = biz_agg_raw(cu, selected_biz, _wc)
+                        _biz_cnt, _ = biz_agg_raw(cu, selected_biz, _wc)
                         if _biz_cnt is not None:
                             cu = cu.copy()
                             cu["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
-                            if _biz_rat is not None and _rc:
-                                cu["_rc"] = _biz_rat.round(1)
+                            # 시트 내장 이용비중 대신 실제 가입완료 인원으로 직접 계산
+                            _biz_completed = biz_filter_df(data.get("registration", pd.DataFrame()), selected_biz)["가입완료"].apply(safe_numeric).sum()
+                            if _biz_completed > 0:
+                                cu["_rc"] = (_biz_cnt / _biz_completed * 100).round(1)
                                 _rc = "_rc"
                     plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#EF5350",
                                        _rc, "이용비중", "#FF6F00",
@@ -4354,10 +4356,13 @@ elif page == "🃏 11.맞고(와플랫)":
                 mu = filter_by_week_range(mu, _wc, p_start, p_end, weeks)
                 mu = shorten_dates_in_df(mu, _wc)
                 if _sum_col:
-                    _biz_cnt, _biz_rat = biz_agg_raw(mu, selected_biz, _wc)
+                    _biz_cnt, _ = biz_agg_raw(mu, selected_biz, _wc)
                     if _biz_cnt is not None:
                         mu = mu.copy(); mu["_bar"] = _biz_cnt; _sum_col = "_bar"
-                        if _biz_rat is not None: mu["_rc"] = _biz_rat.round(1); _rc = "_rc"
+                        # 시트 내장 이용비중 대신 실제 가입완료 인원으로 직접 계산
+                        _biz_completed = biz_filter_df(data.get("registration", pd.DataFrame()), selected_biz)["가입완료"].apply(safe_numeric).sum()
+                        if _biz_completed > 0:
+                            mu["_rc"] = (_biz_cnt / _biz_completed * 100).round(1); _rc = "_rc"
                     plot_bar_rate_dual(mu, _wc, _sum_col, "이용자수", "#42A5F5",
                                        _rc, "이용비중" if selected_biz != "전체" else "전체이용비중", "#FF6F00",
                                        "맞고(와플랫) 이용자수 + 이용비중")
@@ -4516,13 +4521,15 @@ elif page == "😰 7.스트레스체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_cnt, _biz_rat = biz_agg_raw(su, selected_biz, _wc)
+                        _biz_cnt, _ = biz_agg_raw(su, selected_biz, _wc)
                         if _biz_cnt is not None:
                             su = su.copy()
                             su["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
-                            if _biz_rat is not None and _rc:
-                                su["_rc"] = _biz_rat.round(1)
+                            # 시트 내장 이용비중 대신 실제 가입완료 인원으로 직접 계산
+                            _biz_completed = biz_filter_df(data.get("registration", pd.DataFrame()), selected_biz)["가입완료"].apply(safe_numeric).sum()
+                            if _biz_completed > 0:
+                                su["_rc"] = (_biz_cnt / _biz_completed * 100).round(1)
                                 _rc = "_rc"
                     plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#AB47BC",
                                        _rc, "이용비중", "#FF6F00",
