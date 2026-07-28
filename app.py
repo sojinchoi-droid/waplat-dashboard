@@ -1899,16 +1899,20 @@ elif page == "🧭 사업구분별 현황":
             _row["안부체크율(%)"] = None
 
         if not _cardio_row.empty:
-            _c_cnt, _ = biz_agg_raw(_cardio_row, _biz, _cardio_wc)
+            _c_cnt, _c_rat = biz_agg_raw(_cardio_row, _biz, _cardio_wc)
             _row["심혈관 이용자(명)"] = int(_c_cnt.iloc[0]) if _c_cnt is not None else None
+            _row["심혈관 이용비중(%)"] = round(float(_c_rat.iloc[0]), 1) if _c_rat is not None else None
         else:
             _row["심혈관 이용자(명)"] = None
+            _row["심혈관 이용비중(%)"] = None
 
         if not _stress_row.empty:
-            _s_cnt, _ = biz_agg_raw(_stress_row, _biz, _stress_wc)
+            _s_cnt, _s_rat = biz_agg_raw(_stress_row, _biz, _stress_wc)
             _row["스트레스 이용자(명)"] = int(_s_cnt.iloc[0]) if _s_cnt is not None else None
+            _row["스트레스 이용비중(%)"] = round(float(_s_rat.iloc[0]), 1) if _s_rat is not None else None
         else:
             _row["스트레스 이용자(명)"] = None
+            _row["스트레스 이용비중(%)"] = None
 
         # 건강상담 — 해당 주차 일평균
         _hc_b = biz_filter_df(_hc_all, _biz, col="지자체")
@@ -1953,8 +1957,8 @@ elif page == "🧭 사업구분별 현황":
                 <div>가입률 <b>{_fmt(r['가입률(%)'], '%')}</b></div>
                 <div>안부확인율 <b>{_fmt(r['안부확인율(%)'], '%')}</b></div>
                 <div>안부체크율 <b>{_fmt(r['안부체크율(%)'], '%')}</b></div>
-                <div>심혈관 이용자 <b>{_fmt(r['심혈관 이용자(명)'], '명')}</b></div>
-                <div>스트레스 이용자 <b>{_fmt(r['스트레스 이용자(명)'], '명')}</b></div>
+                <div>심혈관 이용자 <b>{_fmt(r['심혈관 이용자(명)'], '명')}</b> <span style="color:#8a94a8">({_fmt(r['심혈관 이용비중(%)'], '%')})</span></div>
+                <div>스트레스 이용자 <b>{_fmt(r['스트레스 이용자(명)'], '명')}</b> <span style="color:#8a94a8">({_fmt(r['스트레스 이용비중(%)'], '%')})</span></div>
                 <div>건강상담(일평균) <b>{_fmt(r['건강상담 건수(일평균)'], '건')}</b></div>
                 <div>걸음수 참여자 <b>{_fmt(r['걸음수 참여자(명)'], '명')}</b></div>
             </div>
@@ -2079,14 +2083,19 @@ elif page == "🧭 사업구분별 현황":
         if _c_wc:
             _cf = filter_by_week_range(_cardio_full, _c_wc, _bt_start, _bt_end, weeks)
             _cf = shorten_dates_in_df(_cf, _c_wc)
-            _rows_cd = []
+            _rows_cd, _rows_cd_r = [], []
             for _biz in _biz_list:
-                _cnt, _ = biz_agg_raw(_cf, _biz, _c_wc)
+                _cnt, _rat = biz_agg_raw(_cf, _biz, _c_wc)
                 if _cnt is None:
                     continue
                 for _wk, _v in zip(_cf[_c_wc], _cnt):
                     _rows_cd.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
+                if _rat is not None:
+                    for _wk, _v in zip(_cf[_c_wc], _rat):
+                        _rows_cd_r.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
             _plot_biz_weekly(pd.DataFrame(_rows_cd), "사업구분별 주차별 심혈관 이용자수 추이", "이용자수 (명)", is_pct=False)
+            _plot_biz_weekly(pd.DataFrame(_rows_cd_r), "사업구분별 주차별 심혈관 이용비중 추이", "이용비중 (%)")
+            st.caption("※ 이용비중 = 심혈관 이용자수 ÷ 해당 지자체 가입인원 × 100")
         else:
             st.info("심혈관 주차별 데이터가 없습니다.")
 
@@ -2096,14 +2105,19 @@ elif page == "🧭 사업구분별 현황":
         if _s_wc:
             _sf = filter_by_week_range(_stress_full, _s_wc, _bt_start, _bt_end, weeks)
             _sf = shorten_dates_in_df(_sf, _s_wc)
-            _rows_st = []
+            _rows_st, _rows_st_r = [], []
             for _biz in _biz_list:
-                _cnt, _ = biz_agg_raw(_sf, _biz, _s_wc)
+                _cnt, _rat = biz_agg_raw(_sf, _biz, _s_wc)
                 if _cnt is None:
                     continue
                 for _wk, _v in zip(_sf[_s_wc], _cnt):
                     _rows_st.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
+                if _rat is not None:
+                    for _wk, _v in zip(_sf[_s_wc], _rat):
+                        _rows_st_r.append({"주차": _wk, "사업구분": _biz, "값": round(float(_v), 1)})
             _plot_biz_weekly(pd.DataFrame(_rows_st), "사업구분별 주차별 스트레스 이용자수 추이", "이용자수 (명)", is_pct=False)
+            _plot_biz_weekly(pd.DataFrame(_rows_st_r), "사업구분별 주차별 스트레스 이용비중 추이", "이용비중 (%)")
+            st.caption("※ 이용비중 = 스트레스 이용자수 ÷ 해당 지자체 가입인원 × 100")
         else:
             st.info("스트레스 주차별 데이터가 없습니다.")
 
