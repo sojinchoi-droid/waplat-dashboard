@@ -1866,8 +1866,11 @@ elif page == "🧭 사업구분별 현황":
         _wr_b = biz_filter_df(_wr_all, _biz)
         _wr_wk = _wr_b[_wr_b["주차"].astype(str).str.strip() == str(_snap_week).strip()] if not _wr_b.empty else pd.DataFrame()
         if not _wr_wk.empty and _contract > 0:
-            _row["가입률(%)"] = round(_wr_wk["가입완료"].apply(safe_numeric).sum() / _contract * 100, 1)
+            _reg_cnt = _wr_wk["가입완료"].apply(safe_numeric).sum()
+            _row["가입수(명)"] = int(_reg_cnt)
+            _row["가입률(%)"] = round(_reg_cnt / _contract * 100, 1)
         else:
+            _row["가입수(명)"] = None
             _row["가입률(%)"] = None
 
         # 안부확인율 — 해당 주차 분자/분모 합산
@@ -1954,7 +1957,7 @@ elif page == "🧭 사업구분별 현황":
                 <span style="font-size:12px;font-weight:500;color:#6b7488"> · 지자체 {r['지자체수']}개 · 이용자(협약) {r['이용자(협약)']:,}명</span>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:22px;font-size:13px;color:#33394a">
-                <div>가입률 <b>{_fmt(r['가입률(%)'], '%')}</b></div>
+                <div>가입률 <b>{_fmt(r['가입률(%)'], '%')}</b> <span style="color:#8a94a8">({_fmt(r['가입수(명)'], '명')})</span></div>
                 <div>안부확인율 <b>{_fmt(r['안부확인율(%)'], '%')}</b></div>
                 <div>안부체크율 <b>{_fmt(r['안부체크율(%)'], '%')}</b></div>
                 <div>심혈관 이용자 <b>{_fmt(r['심혈관 이용자(명)'], '명')}</b> <span style="color:#8a94a8">({_fmt(r['심혈관 이용비중(%)'], '%')})</span></div>
