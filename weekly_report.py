@@ -63,6 +63,19 @@ def biz_of(mun_name: str) -> str:
     return None
 
 
+def fuzzy_get(d: dict, name: str):
+    """지자체명이 시트마다 표기가 달라(예: 희망나래 vs 희망나래장애인복지관, 용인시청 통합돌봄
+    vs 용인시청통합돌봄) 정확히 일치 안 할 수 있어 부분일치로도 찾아본다."""
+    if name in d:
+        return d[name]
+    n_flat = str(name).replace(" ", "")
+    for k, v in d.items():
+        k_flat = str(k).replace(" ", "")
+        if k_flat == n_flat or k_flat in n_flat or n_flat in k_flat:
+            return v
+    return None
+
+
 def build_daymap(weekly_users: pd.DataFrame) -> dict:
     """날짜(YYYY-MM-DD) -> 주차 라벨. 일별 데이터를 주차로 묶을 때 사용."""
     daymap = {}
@@ -223,32 +236,33 @@ def rate_dict(num_den: dict) -> dict:
     return {b: round(n / d * 100, 1) if d > 0 else None for b, (n, d) in num_den.items()}
 
 
-def top_contributors(this_by_mun: dict, prev_by_mun: dict, biz: str, n=TOP_N_CONTRIBUTORS, as_rate=False):
-    """해당 사업구분 소속 지자체들의 전주 대비 변화를 큰 순서로 n개 반환.
+# 사업구분별 "활성 지자체" 전체 목록 — main()에서 registration 기준으로 채움.
+# (BUSINESS_TYPE_MAP의 키를 그대로 쓰면 실사용 안 하는 옛 별칭까지 섞여서,
+#  이용자현황 시트(gid=33599894)의 협약인원>0 지자체 목록과 어긋날 수 있음)
+_MUNIS_BY_BIZ: dict = {}
+
+
+def top_contributors(this_by_mun: dict, prev_by_mun: dict, biz: str, as_rate=False):
+    """해당 사업구분 소속 '활성 지자체 전체'(이용자현황 시트 기준)의 전주 대비 변화를
+    큰 순서로 반환 — 데이터가 없거나 변화가 0이어도 지자체 수만큼 다 표시.
     as_rate=True면 (num,den) 튜플에서 % 변화를 계산, 아니면 raw 값 변화."""
     rows = []
-    munis = set(this_by_mun.keys()) | set(prev_by_mun.keys())
+    munis = _MUNIS_BY_BIZ.get(biz) or sorted(set(this_by_mun.keys()) | set(prev_by_mun.keys()))
     for mun in munis:
-        if biz_of(mun) != biz:
-            continue
-        cur = this_by_mun.get(mun)
-        prev = prev_by_mun.get(mun)
+        cur = fuzzy_get(this_by_mun, mun)
+        prev = fuzzy_get(prev_by_mun, mun)
         if as_rate:
-            cur_r = round(cur[0] / cur[1] * 100, 1) if cur and cur[1] > 0 else None
-            prev_r = round(prev[0] / prev[1] * 100, 1) if prev and prev[1] > 0 else None
-            if cur_r is None or prev_r is None:
-                continue
+            cur_r = round(cur[0] / cur[1] * 100, 1) if cur and cur[1] > 0 else 0.0
+            prev_r = round(prev[0] / prev[1] * 100, 1) if prev and prev[1] > 0 else 0.0
             diff = round(cur_r - prev_r, 1)
             rows.append((mun, prev_r, cur_r, diff))
         else:
             cur_v = cur if cur is not None else 0
             prev_v = prev if prev is not None else 0
             diff = round(cur_v - prev_v, 1)
-            if diff == 0:
-                continue
             rows.append((mun, prev_v, cur_v, diff))
     rows.sort(key=lambda r: abs(r[3]), reverse=True)
-    return rows[:n]
+    return rows
 
 
 # ============================================================
@@ -321,9 +335,11 @@ def main():
     active_biz = set()
     for _, row in reg.iterrows():
         if safe_numeric(row.get("협약인원", 0)) > 0:
-            b = biz_of(row.get("지자체명", ""))
+            name = str(row.get("지자체명", "")).strip()
+            b = biz_of(name)
             if b:
                 active_biz.add(b)
+                _MUNIS_BY_BIZ.setdefault(b, []).append(name)
     biz_list = [b for b in BUSINESS_TYPE_ORDER if b in active_biz]
 
     weeks = sorted(data.get("주차목록", []))
