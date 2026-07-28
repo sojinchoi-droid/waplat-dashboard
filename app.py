@@ -1890,7 +1890,9 @@ elif page == "🧭 사업구분별 현황":
             _chk_wk = _chk_b2[_chk_b2["_wk"] == _snap_week]
             _send = _chk_wk["안부체크발송"].apply(safe_numeric).sum()
             _resp = _chk_wk["안부체크응답"].apply(safe_numeric).sum()
-            _off = _chk_wk["off대상자"].apply(safe_numeric).sum() if "off대상자" in _chk_wk.columns else 0
+            # off대상자는 지자체별 고정값(일별로 반복 저장됨) — 지자체당 1회만 집계
+            _off = (_chk_wk.drop_duplicates(subset=["지자체명"])["off대상자"].apply(safe_numeric).sum()
+                    if "off대상자" in _chk_wk.columns else 0)
             _denom = _send - _off
             _row["안부체크율(%)"] = round(_resp / _denom * 100, 1) if _denom > 0 else None
         else:
@@ -2061,7 +2063,9 @@ elif page == "🧭 사업구분별 현황":
                     _g = _b[_b["주차"] == _wk]
                     _send = _g["안부체크발송"].apply(safe_numeric).sum()
                     _resp = _g["안부체크응답"].apply(safe_numeric).sum()
-                    _off = _g["off대상자"].apply(safe_numeric).sum() if "off대상자" in _g.columns else 0
+                    # off대상자는 지자체별 고정값(일별로 반복 저장됨) — 지자체당 1회만 집계
+                    _off = (_g.drop_duplicates(subset=["지자체명"])["off대상자"].apply(safe_numeric).sum()
+                            if "off대상자" in _g.columns else 0)
                     _denom = _send - _off
                     if _denom > 0:
                         _rows_cc.append({"주차": _wk, "사업구분": _biz, "값": round(_resp / _denom * 100, 1)})
