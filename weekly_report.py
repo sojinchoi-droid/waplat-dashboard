@@ -260,10 +260,23 @@ def fmt_diff(diff, suffix=""):
     return f"{sign}{diff:.1f}{suffix}"
 
 
+def _direction(diff):
+    return ("올랐습니다", "상승") if diff > 0 else ("떨어졌습니다", "하락")
+
+
+def _contrib_phrase_rate(contributors):
+    parts = [f"{mun}({pv}%→{cv}%)" for mun, pv, cv, _ in contributors]
+    return ", ".join(parts)
+
+
+def _contrib_phrase_count(contributors, unit="명"):
+    parts = [f"{mun}({pv:.0f}{unit}→{cv:.0f}{unit})" for mun, pv, cv, _ in contributors]
+    return ", ".join(parts)
+
+
 def build_section(title, this_rate, prev_rate, this_by_mun, prev_by_mun, threshold, unit="%p", as_rate=True, biz_list=None):
-    lines = []
+    paras = []
     biz_list = biz_list or BUSINESS_TYPE_ORDER
-    any_flag = False
     for biz in biz_list:
         cur = this_rate.get(biz)
         prev = prev_rate.get(biz)
@@ -272,18 +285,24 @@ def build_section(title, this_rate, prev_rate, this_by_mun, prev_by_mun, thresho
         diff = round(cur - prev, 1)
         if abs(diff) < threshold:
             continue
-        any_flag = True
-        arrow = "▲" if diff > 0 else "▼"
-        lines.append(f"  {arrow} {biz}: {prev}% → {cur}% ({fmt_diff(diff, unit)})")
+        verb, direction = _direction(diff)
         contributors = top_contributors(this_by_mun, prev_by_mun, biz, as_rate=as_rate)
-        for mun, pv, cv, d in contributors:
-            if as_rate:
-                lines.append(f"      · {mun}: {pv}% → {cv}% ({fmt_diff(d, '%p')})")
-            else:
-                lines.append(f"      · {mun}: {pv:.0f}명 → {cv:.0f}명 ({fmt_diff(d, '명')})")
-    if not any_flag:
+        if as_rate:
+            contrib_txt = _contrib_phrase_rate(contributors)
+        else:
+            contrib_txt = _contrib_phrase_count(contributors)
+        if len(contributors) == 1:
+            contrib_sentence = f"{contrib_txt}의 변화가 그대로 반영된 결과입니다." if contrib_txt else ""
+        elif contrib_txt:
+            contrib_sentence = f"{contrib_txt} 순으로 크게 기여했습니다."
+        else:
+            contrib_sentence = ""
+        para = (f"■ {title} — {biz}: 전주 {prev}%에서 이번 주 {cur}%로 "
+                f"{abs(diff)}%p {verb} ({direction}). {contrib_sentence}").strip()
+        paras.append(para)
+    if not paras:
         return None
-    return f"### {title}\n" + "\n".join(lines)
+    return f"[{title}]\n" + "\n".join(paras)
 
 
 def main():
@@ -394,30 +413,42 @@ def main():
         if sec:
             sections.append(sec)
 
-    # ── 6) 건강상담 / 7) 걸음수 (일평균) ──────────────────────
+    def build_count_section(title, this_by_mun, prev_by_mun, unit, min_diff):
+        this_biz = {b: round(v, 1) for b, v in biz_group(this_by_mun).items()}
+        prev_biz = {b: round(v, 1) for b, v in biz_group(prev_by_mun).items()}
+        paras = []
+        for b in biz_list:
+            cur, prev = this_biz.get(b), prev_biz.get(b)
+            if cur is None or prev is None or prev == 0:
+                continue
+            diff = round(cur - prev, 1)
+            if abs(diff) < min_diff:
+                continue
+            verb, direction = _direction(diff)
+            contributors = top_contributors(this_by_mun, prev_by_mun, b, as_rate=False)
+            contrib_txt = _contrib_phrase_count(contributors, unit)
+            if len(contributors) == 1:
+                contrib_sentence = f"{contrib_txt}의 변화가 그대로 반영된 결과입니다." if contrib_txt else ""
+            elif contrib_txt:
+                contrib_sentence = f"{contrib_txt} 순으로 크게 기여했습니다."
+            else:
+                contrib_sentence = ""
+            para = (f"■ {title} — {b}: 일평균 전주 {prev}{unit}에서 이번 주 {cur}{unit}으로 "
+                    f"{abs(diff)}{unit} {verb} ({direction}). {contrib_sentence}").strip()
+            paras.append(para)
+        return f"[{title}]\n" + "\n".join(paras) if paras else None
+
+    # ── 6) 건강상담 (일평균) ──────────────────────
     hc = data.get("건강상담지자체", pd.DataFrame())
     if not hc.empty and "합계" in hc.columns:
         hc_long = load_daily_avg(hc, "날짜", "지자체", "합계", daymap)
         this_hc = avg_by_mun_week(hc_long, this_week)
         prev_hc = avg_by_mun_week(hc_long, prev_week)
-        this_biz_hc = {b: round(v, 1) for b, v in biz_group(this_hc).items()}
-        prev_biz_hc = {b: round(v, 1) for b, v in biz_group(prev_hc).items()}
-        # 건강상담은 %가 아니라 건수 자체를 비교 (threshold는 건수 기준 별도 취급)
-        sec_lines = []
-        for b in biz_list:
-            cur, prev = this_biz_hc.get(b), prev_biz_hc.get(b)
-            if cur is None or prev is None or prev == 0:
-                continue
-            diff = round(cur - prev, 1)
-            if abs(diff) < max(args.count_threshold, 0.3):
-                continue
-            arrow = "▲" if diff > 0 else "▼"
-            sec_lines.append(f"  {arrow} {b}: {prev}건 → {cur}건 (일평균, {fmt_diff(diff, '건')})")
-            for mun, pv, cv, d in top_contributors(this_hc, prev_hc, b, as_rate=False):
-                sec_lines.append(f"      · {mun}: {pv:.1f}건 → {cv:.1f}건 ({fmt_diff(d, '건')})")
-        if sec_lines:
-            sections.append("### 건강상담 (일평균 건수)\n" + "\n".join(sec_lines))
+        sec = build_count_section("건강상담", this_hc, prev_hc, "건", max(args.count_threshold, 0.3))
+        if sec:
+            sections.append(sec)
 
+    # ── 7) 걸음수 (일평균) ──────────────────────
     steps_raw = sheets.get("걸음수현황", pd.DataFrame())
     STEPS_EXCLUDE = {"WAPLAT", "ai생활지원사테스트", "한전MCS"}
     if not steps_raw.empty and "agencyName" in steps_raw.columns:
@@ -426,22 +457,9 @@ def main():
         steps_long = load_daily_avg(steps, "_date", "agencyName", "memberCnt", daymap)
         this_st = avg_by_mun_week(steps_long, this_week)
         prev_st = avg_by_mun_week(steps_long, prev_week)
-        this_biz_st = {b: round(v, 1) for b, v in biz_group(this_st).items()}
-        prev_biz_st = {b: round(v, 1) for b, v in biz_group(prev_st).items()}
-        sec_lines = []
-        for b in biz_list:
-            cur, prev = this_biz_st.get(b), prev_biz_st.get(b)
-            if cur is None or prev is None or prev == 0:
-                continue
-            diff = round(cur - prev, 1)
-            if abs(diff) < max(args.count_threshold, 1.0):
-                continue
-            arrow = "▲" if diff > 0 else "▼"
-            sec_lines.append(f"  {arrow} {b}: {prev}명 → {cur}명 (일평균, {fmt_diff(diff, '명')})")
-            for mun, pv, cv, d in top_contributors(this_st, prev_st, b, as_rate=False):
-                sec_lines.append(f"      · {mun}: {pv:.1f}명 → {cv:.1f}명 ({fmt_diff(d, '명')})")
-        if sec_lines:
-            sections.append("### 걸음수 (일평균 참여자)\n" + "\n".join(sec_lines))
+        sec = build_count_section("걸음수", this_st, prev_st, "명", max(args.count_threshold, 1.0))
+        if sec:
+            sections.append(sec)
 
     # ── 8) KT 관제율 (세이프 전용, 전사 기준) ─────────────────
     safe_raw = sheets.get("안부체크횟수", pd.DataFrame())
@@ -450,7 +468,7 @@ def main():
         mgmt_col = next((c for c in safe_raw.columns if "kt관제율" in str(c).replace("\n", "").replace(" ", "").lower()), None)
         disp_col = next((c for c in safe_raw.columns if "kt출동율" in str(c).replace("\n", "").replace(" ", "").lower()
                           or "kt출동률" in str(c).replace("\n", "").replace(" ", "").lower()), None)
-        kt_lines = []
+        kt_paras = []
         for label, col in [("KT 관제율", mgmt_col), ("KT 출동율", disp_col)]:
             if col is None:
                 continue
@@ -462,18 +480,19 @@ def main():
             cur, prev = s[col].iloc[-1], s[col].iloc[-2]
             diff = round(cur - prev, 1)
             if abs(diff) >= args.threshold:
-                arrow = "▲" if diff > 0 else "▼"
-                kt_lines.append(f"  {arrow} {label}: {prev}% → {cur}% ({fmt_diff(diff, '%p')})")
-        if kt_lines:
-            sections.append("### KT 관제 현황 (세이프 전용, 전사 기준 — 지자체 분리 불가)\n" + "\n".join(kt_lines))
+                verb, direction = _direction(diff)
+                kt_paras.append(f"■ {label}: 전주 {prev}%에서 이번 주 {cur}%로 {abs(diff)}%p {verb} ({direction}). "
+                                 f"세이프 전체 기준 수치라 지자체별 기여도는 따로 안 나옵니다.")
+        if kt_paras:
+            sections.append("[KT 관제 현황 (세이프 전용)]\n" + "\n".join(kt_paras))
 
     # ── 리포트 출력 ────────────────────────────────────────
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    header = f"# 📊 주간 운영 변동 리포트\n\n비교 대상: {prev_week}주차 → {this_week}주차 (생성: {now})\n임계값: %p 지표 ±{args.threshold}%p 이상 변동만 표시\n"
+    header = f"주간 운영 변동 리포트 ({prev_week}주차 → {this_week}주차, 생성 {now})\n임계값: ±{args.threshold}%p 이상 변동만 표시\n"
     if sections:
         body = "\n\n".join(sections)
     else:
-        body = f"임계값(±{args.threshold}%p) 이상으로 움직인 지표가 없습니다."
+        body = f"임계값(±{args.threshold}%p) 이상으로 움직인 지표가 없습니다. 이번 주는 특별히 짚을 변화가 없었습니다."
     report = header + "\n" + body + "\n"
 
     print(report)
