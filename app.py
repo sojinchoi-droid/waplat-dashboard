@@ -481,16 +481,6 @@ except Exception as e:
     DATA_LOADED = False
     sheets, data = {}, {}
 
-# 시트 H열(사업구분)이 있으면 BUSINESS_TYPE_MAP을 동적으로 덮어씀
-# → 계약 변경 시 시트만 수정하면 자동 반영
-_reg_biz = data.get("registration", pd.DataFrame())
-if not _reg_biz.empty and "사업구분" in _reg_biz.columns:
-    BUSINESS_TYPE_MAP = {
-        str(row["지자체명"]): str(row["사업구분"])
-        for _, row in _reg_biz.iterrows()
-        if str(row.get("사업구분", "")).strip() not in ("", "nan")
-    }
-
 # 협약인원 > 0인 기관만 기준으로 실제 활성 사업구분 계산
 # (이 집합만 biz_selector 라디오 버튼에 표시)
 def _compute_active_biz_types():
@@ -807,8 +797,23 @@ BUSINESS_TYPE_COLORS = {
     "취약지지원": "#E65100", "장애인지원": "#6A1B9A", "퇴원환자지원": "#00695C", "기타": "#757575",
 }
 
-# BUSINESS_TYPE_MAP이 최종 확정된 뒤에 계산해야 함 (그렇지 않으면 상단의 시트 기반
-# 임시 매핑 — 사업구분 표기가 시트 원본과 다를 수 있음 — 으로 오염됨)
+# 시트 H열(사업구분)로 하드코딩 매핑을 덮어씀 → 지자체 신규/변경 시 시트만 고치면 자동 반영.
+# (하드코딩 BUSINESS_TYPE_MAP은 시트에 사업구분이 비어있거나 못 읽어올 때의 fallback으로 유지)
+# 공백/개행 제거 후 BUSINESS_TYPE_ORDER에 있는 값일 때만 덮어씀 — 오타로 새 카테고리가
+# 생기는 걸 막기 위함 (예: 시트의 "취약지 지원" → "취약지지원"으로 정규화 후 매칭).
+_reg_biz = data.get("registration", pd.DataFrame())
+if not _reg_biz.empty and "사업구분" in _reg_biz.columns:
+    for _, _biz_row in _reg_biz.iterrows():
+        _biz_name = str(_biz_row.get("지자체명", "")).strip()
+        _biz_raw = str(_biz_row.get("사업구분", "")).strip()
+        if not _biz_name or _biz_name == "nan" or not _biz_raw or _biz_raw == "nan":
+            continue
+        _biz_norm = _biz_raw.replace(" ", "").replace("\r", "").replace("\n", "")
+        if _biz_norm in BUSINESS_TYPE_ORDER:
+            BUSINESS_TYPE_MAP[_biz_name] = _biz_norm
+
+# BUSINESS_TYPE_MAP이 최종 확정된 뒤에 계산해야 함 (그렇지 않으면 위의 시트 기반
+# 덮어쓰기 전 상태로 오염됨)
 _ACTIVE_BIZ_TYPES: set = _compute_active_biz_types()
 
 # 지자체별 고유 색상 (20개+ 명확히 구분되는 색 — 권역 내에서도 차별화)
