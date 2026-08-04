@@ -1065,14 +1065,49 @@ def get_mun_check_rate_direct() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def get_checkin_mun_rate_direct() -> pd.DataFrame:
-    """안부확인지자체 시트 C:AK(분모)/AL:BT(분자)를 직접 읽어 지자체별 안부확인율 계산
+def _resolve_checkin_mun_denom_numer(header: list) -> tuple:
+    """안부확인지자체 시트에서 지자체별 (분모 컬럼 인덱스, 분자 컬럼 인덱스)를 헤더 텍스트로 찾는다.
 
-    gviz range=A:BT로 72열만 fetch → 위치 기반 접근 (열 이름 무관)
+    분모 컬럼은 지자체명만(접미사 없음), 분자 컬럼은 "지자체명 안부확인자"처럼 접미사가 붙어있음.
+    예전 코드는 분모→분자 오프셋을 고정값(35)으로 가정했는데, 지자체가 늘어(동해시청·
+    인천사회서비스원 추가) 분모 블록이 37칸으로 커지면서 오프셋이 어긋나 엉뚱한 지자체
+    값이 섞여 들어가는 버그가 있었음. 위치 가정 없이 헤더 이름만으로 매칭해서 앞으로
+    지자체가 더 늘어도 안 깨지게 함.
+
+    Returns: (denom_idx: {지자체명: 컬럼인덱스}, numer_idx: {지자체명: 컬럼인덱스})
+    """
+    known_flat = {a.replace(" ", ""): a for a in ALL_KNOWN_AGENCIES}
+    alias_flat = {k.replace(" ", ""): v for k, v in NAME_ALIASES.items()}
+
+    denom_idx, numer_idx = {}, {}
+    for i, col in enumerate(header):
+        if i < 2:  # 시작일, Total 컬럼 스킵
+            continue
+        flat = str(col).replace("\n", "").replace(" ", "").strip()
+        is_numer = "안부확인자" in flat
+        name_part = flat.replace("안부확인자", "")
+        # 정확히 일치할 때만 채택 — 부분일치를 쓰면 "용인시청"(폐지된 옛 컬럼)이
+        # "용인시청통합돌봄"(현재 활성 컬럼)의 부분 문자열이라 서로 뒤섞이는 문제가 있었음
+        mun_name = None
+        if name_part in alias_flat and alias_flat[name_part] in ALL_KNOWN_AGENCIES:
+            mun_name = alias_flat[name_part]
+        elif name_part in known_flat:
+            mun_name = known_flat[name_part]
+        if mun_name is None:
+            continue
+        target = numer_idx if is_numer else denom_idx
+        target.setdefault(mun_name, i)  # 같은 이름의 뒤쪽 블록(안부미확인 등)과 안 겹치게 첫 매칭만 사용
+    return denom_idx, numer_idx
+
+
+def get_checkin_mun_rate_direct() -> pd.DataFrame:
+    """안부확인지자체 시트에서 지자체별 최신 안부확인율을 헤더 이름 매칭으로 계산
+
+    gviz range=A:CZ로 넉넉히 fetch 후 _resolve_checkin_mun_denom_numer()로 이름 매칭
     Returns: DataFrame [지자체명, 분모, 분자, 안부확인율, 시작일]
     """
     GID = SHEET_GIDS["안부확인지자체"]
-    url = BASE_URL + GID + "&range=A:BT"
+    url = BASE_URL + GID + "&range=A:CZ"
     try:
         resp = requests.get(url, timeout=30)
         resp.raise_for_status()
@@ -1083,16 +1118,11 @@ def get_checkin_mun_rate_direct() -> pd.DataFrame:
         print(f"[sheets_data] get_checkin_mun_rate_direct error: {e}")
         return pd.DataFrame()
 
-    if df.empty or len(df.columns) < 72:
+    if df.empty or len(df.columns) < 40:
         return pd.DataFrame()
 
-    header = list(df.columns)  # 72개 컬럼명 (row1 값 = 지자체명/blank)
-
-    # C~L (분모 위치 2-11): 헤더 없는 첫 10개 기관 — 순서 하드코딩
-    UNLABELED_NAMES = [
-        "경기도청", "용인시청", "서초구청", "진천군청", "음성군청",
-        "강북구청", "금정구청", "괴산군청", "증평군청", "포천시청",
-    ]
+    header = list(df.columns)
+    denom_idx, numer_idx = _resolve_checkin_mun_denom_numer(header)
 
     # 최신 유효 날짜 행 (YYYY-MM-DD 형식)
     date_series = df.iloc[:, 0].astype(str).str.strip()
@@ -1102,40 +1132,20 @@ def get_checkin_mun_rate_direct() -> pd.DataFrame:
         return pd.DataFrame()
 
     latest_date = valid_df.iloc[-1, 0]
-    latest_vals = valid_df.iloc[-1].values  # numpy array, 위치 기반
+    latest_vals = valid_df.iloc[-1].values
 
     rows = []
-
-    # ① C~L (위치 2-11) 분모 / AL~AU (위치 37-46) 분자
-    for i, name in enumerate(UNLABELED_NAMES):
-        if name not in ALL_KNOWN_AGENCIES:
+    for mun_name, d_i in denom_idx.items():
+        n_i = numer_idx.get(mun_name)
+        if n_i is None:
             continue
-        denom = safe_numeric(latest_vals[2 + i])
-        numer = safe_numeric(latest_vals[37 + i])
-        rate = round(numer / denom * 100, 1) if denom > 0 else 0.0
-        rows.append({"지자체명": name, "분모": int(denom), "분자": int(numer),
-                     "안부확인율": rate, "시작일": str(latest_date)})
-
-    # ② M~AK (위치 12-36) 분모 / AV~BT (위치 47-71) 분자 (헤더에 지자체명)
-    for i in range(25):
-        col_label = str(header[12 + i]).replace("\n", "").replace(" ", "").strip()
-        # 지자체명 추출: MUNICIPALITY_KEYWORDS 매칭
-        mun_name = None
-        for kw in MUNICIPALITY_KEYWORDS:
-            if kw in col_label:
-                mun_name = normalize_agency_name(kw)
-                break
-        if mun_name is None:
-            mun_name = normalize_agency_name(col_label)
-        if mun_name not in ALL_KNOWN_AGENCIES:
-            continue
-        denom = safe_numeric(latest_vals[12 + i])
-        numer = safe_numeric(latest_vals[47 + i])
+        denom = safe_numeric(latest_vals[d_i])
+        numer = safe_numeric(latest_vals[n_i])
         rate = round(numer / denom * 100, 1) if denom > 0 else 0.0
         rows.append({"지자체명": mun_name, "분모": int(denom), "분자": int(numer),
                      "안부확인율": rate, "시작일": str(latest_date)})
 
-    # ③ ALL_KNOWN_AGENCIES에서 누락된 기관 → 0으로 패딩
+    # 누락 기관 → 0으로 패딩
     found = {r["지자체명"] for r in rows}
     for agency in ALL_KNOWN_AGENCIES:
         if agency not in found:
@@ -1146,13 +1156,14 @@ def get_checkin_mun_rate_direct() -> pd.DataFrame:
 
 
 def get_checkin_mun_weekly() -> pd.DataFrame:
-    """안부확인지자체 시트 C:AK(분모=전체회원)/AL:BT(분자=안부확인자)를 직접 읽어
-    주차별 지자체별 안부확인율 시계열 반환 (long-format, 모든 주차)
+    """안부확인지자체 시트에서 지자체별 안부확인율 시계열을 헤더 이름 매칭으로 계산
+    (long-format, 모든 주차)
 
+    gviz range=A:CZ로 넉넉히 fetch 후 _resolve_checkin_mun_denom_numer()로 이름 매칭
     Returns: DataFrame [시작일, 지자체명, 분모, 분자, 안부확인율]
     """
     GID = SHEET_GIDS["안부확인지자체"]
-    url = BASE_URL + GID + "&range=A:BT"
+    url = BASE_URL + GID + "&range=A:CZ"
     try:
         resp = requests.get(url, timeout=30)
         resp.raise_for_status()
@@ -1163,15 +1174,11 @@ def get_checkin_mun_weekly() -> pd.DataFrame:
         print(f"[sheets_data] get_checkin_mun_weekly error: {e}")
         return pd.DataFrame()
 
-    if df.empty or len(df.columns) < 72:
+    if df.empty or len(df.columns) < 40:
         return pd.DataFrame()
 
     header = list(df.columns)
-
-    UNLABELED_NAMES = [
-        "경기도청", "용인시청", "서초구청", "진천군청", "음성군청",
-        "강북구청", "금정구청", "괴산군청", "증평군청", "포천시청",
-    ]
+    denom_idx, numer_idx = _resolve_checkin_mun_denom_numer(header)
 
     date_series = df.iloc[:, 0].astype(str).str.strip()
     valid_mask = date_series.str.match(r"\d{4}-\d{2}-\d{2}")
@@ -1184,33 +1191,12 @@ def get_checkin_mun_weekly() -> pd.DataFrame:
         date_val = str(valid_df.iloc[row_idx, 0])
         vals = valid_df.iloc[row_idx].values
 
-        # ① C~L (위치 2-11) 분모 / AL~AU (위치 37-46) 분자
-        for i, name in enumerate(UNLABELED_NAMES):
-            if name not in ALL_KNOWN_AGENCIES:
+        for mun_name, d_i in denom_idx.items():
+            n_i = numer_idx.get(mun_name)
+            if n_i is None:
                 continue
-            denom = safe_numeric(vals[2 + i])
-            numer = safe_numeric(vals[37 + i])
-            if denom > 0:
-                rows.append({
-                    "시작일": date_val, "지자체명": name,
-                    "분모": int(denom), "분자": int(numer),
-                    "안부확인율": round(numer / denom * 100, 1),
-                })
-
-        # ② M~AK (위치 12-36) 분모 / AV~BT (위치 47-71) 분자
-        for i in range(25):
-            col_label = str(header[12 + i]).replace("\n", "").replace(" ", "").strip()
-            mun_name = None
-            for kw in MUNICIPALITY_KEYWORDS:
-                if kw in col_label:
-                    mun_name = normalize_agency_name(kw)
-                    break
-            if mun_name is None:
-                mun_name = normalize_agency_name(col_label)
-            if mun_name not in ALL_KNOWN_AGENCIES:
-                continue
-            denom = safe_numeric(vals[12 + i])
-            numer = safe_numeric(vals[47 + i])
+            denom = safe_numeric(vals[d_i])
+            numer = safe_numeric(vals[n_i])
             if denom > 0:
                 rows.append({
                     "시작일": date_val, "지자체명": mun_name,

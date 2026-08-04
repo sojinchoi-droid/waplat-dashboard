@@ -1083,14 +1083,33 @@ def get_active_agencies_for_week(week: str) -> list:
     return active
 
 
-def plot_municipality_lines(df_long, title, height=350, metric_label="값", show_avg=True):
-    """지자체별 주간 추이 라인 차트 — 10개 이상이면 Top/Bottom 5 포커스"""
-    if df_long.empty:
+def plot_municipality_lines(df_long, title, height=350, metric_label="값", show_avg=True, expected_munis=None):
+    """지자체별 주간 추이 라인 차트 — 10개 이상이면 Top/Bottom 5 포커스
+
+    expected_munis를 주면(활성 지자체 전체 목록), 값이 없는 주차·지자체 조합도
+    0으로 채워서 항상 지자체 수만큼 다 나오게 한다."""
+    if df_long.empty and not expected_munis:
         st.info("데이터 없음")
         return
 
     x_col = "주차"
-    df_long = shorten_dates_in_df(df_long, x_col)
+    if not df_long.empty:
+        df_long = shorten_dates_in_df(df_long, x_col)
+
+    if expected_munis:
+        weeks_present = sorted(df_long[x_col].dropna().unique()) if not df_long.empty else []
+        if weeks_present:
+            existing = set(zip(df_long["지자체명"], df_long[x_col]))
+            pad_rows = [{"지자체명": mun, x_col: wk, "값": 0}
+                        for wk in weeks_present for mun in expected_munis
+                        if (mun, wk) not in existing]
+            if pad_rows:
+                df_long = pd.concat([df_long, pd.DataFrame(pad_rows)], ignore_index=True)
+
+    if df_long.empty:
+        st.info("데이터 없음")
+        return
+
     mun_count = df_long["지자체명"].nunique()
 
     # 지자체가 10개 이상이면 포커스 모드
@@ -1166,6 +1185,17 @@ def biz_selector(key):
     opts = _active_biz_opts()
     return st.radio("사업구분 선택", opts, horizontal=True,
                     label_visibility="collapsed", key=f"biz_{key}")
+
+def active_muni_list(biz):
+    """현재 사업구분 선택에 해당하는 활성 지자체(협약인원>0) 이름 목록.
+    plot_municipality_lines(expected_munis=...)에 넘겨서 값이 0인 지자체도
+    항상 그래프에 나오게 하는 용도."""
+    reg = data.get("registration", pd.DataFrame())
+    reg_b = biz_filter_df(reg, biz)
+    if reg_b.empty or "협약인원" not in reg_b.columns:
+        return []
+    active = reg_b[reg_b["협약인원"].apply(safe_numeric) > 0]
+    return sorted(active["지자체명"].astype(str).str.strip().unique().tolist())
 
 def biz_filter_wide_cols(cols, biz):
     """Wide-format DataFrame의 컬럼 목록에서 선택된 사업구분 소속 지자체 컬럼만 반환.
