@@ -74,6 +74,52 @@ ALL_KNOWN_AGENCIES = [
     "세종사회서비스원", "동해시청", "인천사회서비스원",
 ]
 
+
+def sync_known_agencies_from_registration(sheets: dict) -> int:
+    """이용자현황 시트의 협약인원>0 지자체를 ALL_KNOWN_AGENCIES·MUNICIPALITY_KEYWORDS에
+    자동으로 추가한다 (제자리에서 리스트를 수정 — import한 다른 모듈에서도 바로 보임).
+
+    지자체가 계속 새로 생기는데 두 목록을 하드코딩해두면 매번 수동으로 고쳐야 해서,
+    fetch_all_sheets() 안에서 매번 호출해 자동으로 최신 상태를 유지한다.
+    이미 있는 이름은 건너뜀. Returns: 새로 추가된 지자체 수.
+    """
+    df = sheets.get("이용자현황", pd.DataFrame())
+    if df.empty or len(df.columns) < 2:
+        return 0
+    name_col = df.columns[0]
+    amount_col = next((c for c in df.columns if "협약" in str(c)), None)
+
+    def _already_known(name: str) -> bool:
+        """공백 차이나 별칭(예: 희망나래 vs 희망나래장애인복지관)까지 감안한 부분일치 확인."""
+        name_n = name.replace(" ", "")
+        if name in NAME_ALIASES or name_n in {k.replace(" ", "") for k in NAME_ALIASES}:
+            return True
+        for known in ALL_KNOWN_AGENCIES:
+            known_n = known.replace(" ", "")
+            if known_n == name_n or known_n in name_n or name_n in known_n:
+                return True
+        return False
+
+    added = 0
+    for _, row in df.iterrows():
+        name = str(row.get(name_col, "")).strip()
+        if not name or name == "nan":
+            continue
+        if amount_col is not None:
+            try:
+                amt = float(str(row[amount_col]).replace(",", "").strip())
+            except (ValueError, TypeError):
+                amt = 0
+            if amt <= 0:
+                continue
+        if _already_known(name):
+            continue
+        ALL_KNOWN_AGENCIES.append(name)
+        MUNICIPALITY_KEYWORDS.append(name)
+        added += 1
+    return added
+
+
 # 이름 별칭 (같은 지자체의 다른 표기)
 NAME_ALIASES = {
     "희망나래장애인복지관": "희망나래",
@@ -265,6 +311,12 @@ def fetch_all_sheets() -> dict:
 
     # AI 생활지원사 월간구분 매핑 (외부 스프레드시트)
     data["ai_gubn_mapping"] = _build_ai_gubn_mapping()
+
+    # 신규 지자체 자동 반영 (ALL_KNOWN_AGENCIES / MUNICIPALITY_KEYWORDS 갱신)
+    try:
+        sync_known_agencies_from_registration(data)
+    except Exception as e:
+        print(f"[sheets_data] sync_known_agencies_from_registration error: {e}")
 
     return data
 
