@@ -59,19 +59,19 @@ MUNICIPALITY_KEYWORDS = [
     "양평군청", "정선군청",
     "고성군청", "광주동구청",
     "계양구청", "연수구청", "영월군청", "다살림재가노인지원서비스센터",
-    "세종사회서비스원",
+    "세종사회서비스원", "동해시청", "인천사회서비스원",
 ]
 
-# 전체 계약 지자체 목록 (29개) — 시트에 없는 경우 0으로 패딩
+# 전체 계약 지자체 목록 (31개) — 시트에 없는 경우 0으로 패딩
 ALL_KNOWN_AGENCIES = [
-    # 7월 기준 라이브 29개 (독거노인종합지원센터·강북구청 계약 종료로 제외)
+    # 8월 기준 라이브 31개 (독거노인종합지원센터·강북구청 계약 종료로 제외)
     "강릉시청", "강원사회서비스원", "경기도청", "경남사회서비스원", "고성군청",
     "광명시청", "광주동구청", "금정구청", "삼척시청", "서귀포시청",
     "서초구청", "양양군청", "양평군청", "영월군청",
     "용인시청통합돌봄", "음성군청", "정선군청", "제주시청", "증평군청",
     "진천군청", "충남사회서비스원", "충북사회서비스원", "포천시청", "홍천군청",
     "희망나래", "계양구청", "연수구청", "다살림재가노인지원서비스센터",
-    "세종사회서비스원",
+    "세종사회서비스원", "동해시청", "인천사회서비스원",
 ]
 
 # 이름 별칭 (같은 지자체의 다른 표기)
@@ -959,13 +959,18 @@ def get_app_deletion_data(sheets: dict) -> pd.DataFrame:
 
 
 def get_mun_check_rate_direct() -> pd.DataFrame:
-    """안부확인지자체 시트 PH:QJ(29열)에서 지자체별 안부체크율 직접 읽기
+    """안부확인지자체 시트 QF:RJ(지자체별 "안부체크율1" 컬럼 전체)에서 안부체크율 직접 읽기
+
+    (예전엔 PH:QJ를 썼는데, 지자체가 늘면서 안부체크율1 컬럼 그룹이 오른쪽으로
+    밀려나 일부만 걸리고 나머지는 다른 컬럼(안부콜응답률)이 섞여 들어가거나
+    아예 빠져서 0으로 잘못 표시되는 버그가 있었음 — 예: 포천시청가 QF:RJ 안에
+    있는데 PH:QJ 범위엔 안 걸려서 0%로 잘못 나왔음)
 
     최신 행(마지막 주차)의 값을 반환. 값 형식 "X%"는 safe_numeric으로 처리.
     Returns: DataFrame [지자체명, 안부체크율]
     """
     GID = SHEET_GIDS["안부확인지자체"]
-    url = BASE_URL + GID + "&range=PH:QJ"
+    url = BASE_URL + GID + "&range=QF:RJ"
     try:
         resp = requests.get(url, timeout=30)
         resp.raise_for_status()
@@ -985,6 +990,8 @@ def get_mun_check_rate_direct() -> pd.DataFrame:
     rows = []
     for i, col_name in enumerate(header):
         name_raw = str(col_name).replace("\n", "").replace(" ", "").strip()
+        if "체크율" not in name_raw:
+            continue  # 범위가 밀려서 다른 지표(안부콜응답률 등)가 섞여 들어오는 걸 방지
         mun_name = None
         for kw in MUNICIPALITY_KEYWORDS:
             if kw in name_raw:
