@@ -143,6 +143,26 @@ def normalize_agency_name(name: str) -> str:
             return standard
     return name
 
+def match_municipality_keyword(col_text: str):
+    """컬럼명 텍스트가 MUNICIPALITY_KEYWORDS 중 어느 지자체에 해당하는지 찾는다.
+
+    정확히 일치하는 키워드를 최우선으로 채택하고, 없을 때만 부분일치로 폴백하되
+    폴백 시엔 가장 긴(구체적인) 키워드를 고른다. 부분일치만 쓰면 짧은 이름이 긴
+    이름의 부분문자열인 경우(예: "용인시청"이 "용인시청통합돌봄"의 부분문자열)
+    리스트 순서에 따라 엉뚱한 지자체로 잘못 귀속되는 버그가 실제로 있었음 —
+    새 지자체가 계속 추가되는 구조라 이 매칭 방식을 쓰는 모든 곳에서 재발 가능.
+
+    Returns: 매칭된 키워드 원문(MUNICIPALITY_KEYWORDS의 항목 그대로) or None
+    """
+    flat = str(col_text).replace("\n", "").replace(" ", "").strip()
+    for kw in MUNICIPALITY_KEYWORDS:
+        if kw.replace(" ", "") == flat:
+            return kw
+    candidates = [kw for kw in MUNICIPALITY_KEYWORDS if kw.replace(" ", "") in flat]
+    if candidates:
+        return max(candidates, key=lambda k: len(k.replace(" ", "")))
+    return None
+
 # 수도권 / 비수도권 분류
 REGION_MAP = {
     "경기도청": "수도권", "용인시청": "수도권", "용인시청통합돌봄": "수도권",
@@ -338,14 +358,12 @@ def get_check_off_users(sheets: dict = None) -> dict:
     # 첫 번째 컬럼은 "구분", 나머지가 지자체명
     for col in df.columns:
         col_clean = str(col).replace("\n", "").strip()
-        # 지자체 키워드 매칭
-        for kw in MUNICIPALITY_KEYWORDS:
-            if kw in col_clean:
-                # 마지막 행(최신 데이터) 사용
-                val = df[col].dropna()
-                if not val.empty:
-                    result[kw] = safe_numeric(val.iloc[-1])
-                break
+        kw = match_municipality_keyword(col_clean)
+        if kw is not None:
+            # 마지막 행(최신 데이터) 사용
+            val = df[col].dropna()
+            if not val.empty:
+                result[kw] = safe_numeric(val.iloc[-1])
 
     return result
 
@@ -365,12 +383,15 @@ def find_municipality_columns(df: pd.DataFrame) -> list:
 def extract_municipality_name(col_name: str) -> str:
     """컬럼명에서 순수 지자체명만 추출 + 이름 정규화"""
     col_clean = str(col_name).replace("\n", "").replace(" ", "").strip()
-    for kw in MUNICIPALITY_KEYWORDS:
-        if kw in col_clean:
-            return normalize_agency_name(kw)
-    # 별칭 직접 체크
-    result = normalize_agency_name(col_clean)
-    return result
+    kw = match_municipality_keyword(col_clean)
+    if kw is not None:
+        # normalize_agency_name()의 부분일치 폴백을 쓰면 "용인시청"(그 자체로 유효한
+        # 키워드)이 "용인시청 통합돌봄" 별칭의 부분문자열이라는 이유로 다시 그쪽으로
+        # 뒤섞이는 문제가 있었음(실제로 심혈관/스트레스 이용자 시트에서 재현됨) —
+        # 정확히 일치하는 별칭 키가 있을 때만 정규화하고, 아니면 매칭된 키워드를 그대로 사용
+        return NAME_ALIASES.get(kw, kw)
+    # 매칭되는 키워드가 없을 때만 전체 문자열 기준 별칭 정규화 폴백
+    return normalize_agency_name(col_clean)
 
 
 def safe_numeric(val):
@@ -1049,11 +1070,10 @@ def get_mun_check_rate_direct() -> pd.DataFrame:
         name_raw = str(col_name).replace("\n", "").replace(" ", "").strip()
         if "체크율" not in name_raw:
             continue  # 범위가 밀려서 다른 지표(안부콜응답률 등)가 섞여 들어오는 걸 방지
-        mun_name = None
-        for kw in MUNICIPALITY_KEYWORDS:
-            if kw in name_raw:
-                mun_name = normalize_agency_name(kw)
-                break
+        # normalize_agency_name()은 자체 부분일치 폴백이 있어 "용인시청"(구)이
+        # "용인시청 통합돌봄"의 부분문자열이라는 이유로 다시 뒤섞일 수 있어 쓰지 않음 —
+        # match_municipality_keyword가 고른 키워드를 그대로 지자체명으로 사용
+        mun_name = match_municipality_keyword(name_raw)
         if mun_name is None:
             continue
         if mun_name not in ALL_KNOWN_AGENCIES:
@@ -1241,26 +1261,30 @@ def get_checkin_municipality_rate(sheets: dict) -> pd.DataFrame:
     rate_columns = {}  # {지자체명: {지표: 컬럼명}}
     for c in df.columns:
         cl = str(c).replace("\n", "").replace(" ", "").strip()
-        for kw in MUNICIPALITY_KEYWORDS:
-            if kw in cl:
-                if "안부체크율1" in cl:
-                    # LP~MJ열: 직접 할당(override) — IT~JR보다 우선
-                    rate_columns.setdefault(kw, {})
-                    rate_columns[kw]["안부체크율_원본"] = c
-                elif "안부체크율" in cl:
-                    # IT~JR열: LP~MJ가 없을 때만 fallback
-                    rate_columns.setdefault(kw, {}).setdefault("안부체크율_원본", c)
-                elif "안부체크발송" in cl:
-                    rate_columns.setdefault(kw, {})["안부체크발송"] = c
-                elif "안부체크응답" in cl:
-                    rate_columns.setdefault(kw, {})["안부체크응답"] = c
-                elif "안부확인율" in cl:
-                    rate_columns.setdefault(kw, {})["안부확인율"] = c
-                elif "48미확인율" in cl or "48시간미확인율" in cl:
-                    rate_columns.setdefault(kw, {})["48미확인율"] = c
-                elif "안부콜응답률" in cl:
-                    rate_columns.setdefault(kw, {})["안부콜응답률"] = c
-                break
+        kw = match_municipality_keyword(cl)
+        if kw is not None:
+            # normalize_agency_name()은 자체 부분일치 폴백이 있어 "용인시청"(구)이
+            # "용인시청 통합돌봄"의 부분문자열이라는 이유로 다시 뒤섞일 수 있음 —
+            # match_municipality_keyword가 이미 올바른 키워드를 골라준 뒤이므로
+            # 여기선 그 키워드를 그대로 키로 쓴다(기존 동작과 동일).
+            mun_key = kw
+            if "안부체크율1" in cl:
+                # LP~MJ열: 직접 할당(override) — IT~JR보다 우선
+                rate_columns.setdefault(mun_key, {})
+                rate_columns[mun_key]["안부체크율_원본"] = c
+            elif "안부체크율" in cl:
+                # IT~JR열: LP~MJ가 없을 때만 fallback
+                rate_columns.setdefault(mun_key, {}).setdefault("안부체크율_원본", c)
+            elif "안부체크발송" in cl:
+                rate_columns.setdefault(mun_key, {})["안부체크발송"] = c
+            elif "안부체크응답" in cl:
+                rate_columns.setdefault(mun_key, {})["안부체크응답"] = c
+            elif "안부확인율" in cl:
+                rate_columns.setdefault(mun_key, {})["안부확인율"] = c
+            elif "48미확인율" in cl or "48시간미확인율" in cl:
+                rate_columns.setdefault(mun_key, {})["48미확인율"] = c
+            elif "안부콜응답률" in cl:
+                rate_columns.setdefault(mun_key, {})["안부콜응답률"] = c
 
     if not rate_columns:
         return pd.DataFrame()

@@ -459,23 +459,33 @@ def cached_heatmap(_data: dict, week: str) -> "pd.DataFrame":
 def cached_week_summary(sheets: dict, data: dict, week: str) -> dict:
     return get_week_summary(sheets, data, week)
 
+@st.cache_resource(ttl=14400)
+def _seed_and_import_once(_sheets):
+    """지자체 자동 등록 + 안부확인 raw 데이터 임포트 + 계약 정보 보정을 프로세스
+    전체에서 4시간에 한 번만 실행 (기존엔 st.session_state로 세션별 1회였는데,
+    Streamlit은 여러 브라우저 탭이 같은 프로세스를 공유하므로 새 탭이 열릴 때마다
+    전체 raw 데이터(8천+행)를 다시 upsert했음 — 동시접속 시 SQLite 락 경합으로
+    일부 행이 조용히 누락될 수 있었고 불필요하게 느렸음). _sheets는 캐시 키에서
+    제외(언더스코어 prefix)하고 TTL로만 재실행 시점을 제어."""
+    seeded = seed_agencies_from_sheets(_sheets)
+    imported = import_safety_check_from_sheets(_sheets)
+    # 계약 시작 알림에 반영할 최신 정보 보정 (동해시청/인천사회서비스원 메모, 충주/경주시청 신규)
+    apply_agency_corrections()
+    return {"seeded": seeded, "imported": imported}
+
 try:
     sheets, data = load_all_data()
     DATA_LOADED = True
 
     _G_CR: dict = {}  # 미사용 (KPI 카드는 get_week_summary의 안부체크율 사용)
-    # 최초 1회: Google Sheets에서 지자체 자동 등록 + 안부확인 raw 데이터 임포트
-    if "agency_seeded" not in st.session_state:
-        seeded = seed_agencies_from_sheets(sheets)
-        if seeded > 0:
-            st.toast(f"Google Sheets에서 {seeded}개 지자체 자동 등록됨")
-        # 안부확인 raw 데이터 임포트
-        imported = import_safety_check_from_sheets(sheets)
-        if imported > 0:
-            st.toast(f"안부확인 raw 데이터 {imported}건 임포트됨")
-        # 계약 시작 알림에 반영할 최신 정보 보정 (동해시청/인천사회서비스원 메모, 충주/경주시청 신규)
-        apply_agency_corrections()
-        st.session_state["agency_seeded"] = True
+    _seed_result = _seed_and_import_once(sheets)
+    # 토스트 표시 여부는 세션 단위로 (캐시된 결과라도 새 탭에선 한 번은 안내)
+    if "agency_seed_toast_shown" not in st.session_state:
+        if _seed_result["seeded"] > 0:
+            st.toast(f"Google Sheets에서 {_seed_result['seeded']}개 지자체 자동 등록됨")
+        if _seed_result["imported"] > 0:
+            st.toast(f"안부확인 raw 데이터 {_seed_result['imported']}건 임포트됨")
+        st.session_state["agency_seed_toast_shown"] = True
 except Exception as e:
     st.error(f"데이터 로딩 실패: {e}")
     DATA_LOADED = False
