@@ -2015,6 +2015,63 @@ elif page == "🧭 사업구분별 현황":
     st.caption("⚠ 복약관리·생활상담은 지자체별 원본 데이터가 없어 사업구분별 집계가 불가능해 표에서 제외했습니다. "
                "맞고(와플랫+게스트)·맞고(게스트)도 동일한 이유로 제외됩니다.")
 
+    # ---- 통합돌봄 상품 구성 (베이직/세이프) — 이용자현황 시트 "구분" 컬럼(G열) 기준 ----
+    if "통합돌봄" in _biz_list:
+        _tb_reg = biz_filter_df(_reg_all, "통합돌봄")
+        _tb_active = _tb_reg[_tb_reg["협약인원"].apply(safe_numeric) > 0] if not _tb_reg.empty else _tb_reg
+        if not _tb_active.empty and "구분" in _tb_active.columns:
+            _tb_active = _tb_active.copy()
+            _tb_active["구분"] = _tb_active["구분"].astype(str).str.replace("\n", " ", regex=False).str.strip()
+            _tb_active = _tb_active[~_tb_active["구분"].isin(["", "nan"])]
+            _tb_total_mun = _tb_active["지자체명"].nunique()
+            _tb_total_users = _tb_active["가입완료"].apply(safe_numeric).sum()
+
+            _gubn_rows = []
+            for _g, _gdf in _tb_active.groupby("구분"):
+                _mun_n = _gdf["지자체명"].nunique()
+                _user_n = _gdf["가입완료"].apply(safe_numeric).sum()
+                _gubn_rows.append({
+                    "구분": _g,
+                    "지자체수": _mun_n,
+                    "지자체비율(%)": round(_mun_n / _tb_total_mun * 100, 1) if _tb_total_mun else 0,
+                    "이용자수(명)": int(_user_n),
+                    "이용자비율(%)": round(_user_n / _tb_total_users * 100, 1) if _tb_total_users else 0,
+                })
+            _gubn_df = pd.DataFrame(_gubn_rows).sort_values("이용자수(명)", ascending=False).reset_index(drop=True)
+
+            _safe_mask = _tb_active["구분"].str.contains("세이프", na=False)
+            _safe_mun_n = _tb_active.loc[_safe_mask, "지자체명"].nunique()
+            _safe_mun_pct = round(_safe_mun_n / _tb_total_mun * 100, 1) if _tb_total_mun else 0
+            _tb_color = BUSINESS_TYPE_COLORS.get("통합돌봄", "#666")
+
+            st.markdown("")
+            st.markdown('<div class="section-header">🛡 통합돌봄 상품 구성 (베이직 · 세이프)</div>', unsafe_allow_html=True)
+
+            _gubn_badges = "".join(
+                f'<span style="display:inline-block;margin-right:14px">{row["구분"]} '
+                f'<b>{row["지자체수"]}개</b> <span style="color:#8a94a8">({row["지자체비율(%)"]}%)</span> · '
+                f'<b>{row["이용자수(명)"]:,}명</b> <span style="color:#8a94a8">({row["이용자비율(%)"]}%)</span></span>'
+                for _, row in _gubn_df.iterrows()
+            )
+            st.markdown(f"""<div style="border-left:6px solid {_tb_color};background:#fff;border-radius:10px;
+                padding:14px 18px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+                <div style="font-size:15px;font-weight:800;color:{_tb_color};margin-bottom:6px">
+                    세이프 사용 지자체 <span style="font-size:20px">{_safe_mun_n}</span>개 / {_tb_total_mun}개
+                    <span style="font-size:13px;font-weight:600;color:#8a94a8">({_safe_mun_pct}%)</span>
+                </div>
+                <div style="font-size:13px;color:#33394a">{_gubn_badges}</div>
+            </div>""", unsafe_allow_html=True)
+
+            with st.expander("📋 통합돌봄 지자체별 상품 구분 보기", expanded=False):
+                st.dataframe(
+                    _tb_active[["지자체명", "구분", "협약인원", "가입완료"]].sort_values("지자체명").reset_index(drop=True),
+                    use_container_width=True, hide_index=True
+                )
+            st.caption("※ '세이프 사용 지자체'는 구분에 '세이프'가 포함된 경우(세이프·세이프 플러스 등)를 모두 포함합니다. "
+                       "이용자수는 회원가입 완료 인원 기준입니다.")
+        else:
+            st.info("통합돌봄 상품 구성(구분) 데이터가 없습니다.")
+
     st.markdown("")
     st.markdown('<div class="section-header">📈 사업구분별 주차별 추이</div>', unsafe_allow_html=True)
     _bt_start, _bt_end = page_week_range_selector("bizstatus_trend", weeks)
