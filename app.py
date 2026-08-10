@@ -1981,11 +1981,10 @@ elif page == "🧭 사업구분별 현황":
     _cardio_row, _cardio_wc = _wide_week_row("심혈관이용자", _snap_week)
     _stress_row, _stress_wc = _wide_week_row("스트레스이용자", _snap_week)
 
-    _rows = []
-    for _biz in _biz_list:
-        _row = {"사업구분": _biz}
+    def _compute_biz_row(_biz, _gubn="전체"):
+        _row = {"사업구분": biz_gubn_label(_biz, _gubn)}
 
-        _reg_b = biz_filter_df(_reg_all, _biz)
+        _reg_b = biz_filter_df_gubn(_reg_all, _biz, _gubn) if _biz == "통합돌봄" else biz_filter_df(_reg_all, _biz)
         _active_reg_b = _reg_b.loc[_reg_b["협약인원"].apply(safe_numeric) > 0] if not _reg_b.empty else _reg_b
         _contract = _reg_b["협약인원"].apply(safe_numeric).sum() if not _reg_b.empty else 0
         _reg_completed = _reg_b["가입완료"].apply(safe_numeric).sum() if not _reg_b.empty and "가입완료" in _reg_b.columns else 0
@@ -1994,7 +1993,7 @@ elif page == "🧭 사업구분별 현황":
         _row["이용자(협약)"] = int(_contract)
 
         # 가입률 — 해당 주차 가입완료 ÷ 현재 협약인원(고정)
-        _wr_b = biz_filter_df(_wr_all, _biz)
+        _wr_b = biz_filter_df_gubn(_wr_all, _biz, _gubn) if _biz == "통합돌봄" else biz_filter_df(_wr_all, _biz)
         _wr_wk = _wr_b[_wr_b["주차"].astype(str).str.strip() == str(_snap_week).strip()] if not _wr_b.empty else pd.DataFrame()
         if not _wr_wk.empty and _contract > 0:
             _reg_cnt = _wr_wk["가입완료"].apply(safe_numeric).sum()
@@ -2005,7 +2004,7 @@ elif page == "🧭 사업구분별 현황":
             _row["가입률(%)"] = None
 
         # 안부확인율 — 해당 주차 분자/분모 합산
-        _cw_b = biz_filter_df(_cw_all, _biz)
+        _cw_b = biz_filter_df_gubn(_cw_all, _biz, _gubn, col="지자체명") if _biz == "통합돌봄" else biz_filter_df(_cw_all, _biz)
         if not _cw_b.empty:
             _cw_b2 = _cw_b.copy()
             _cw_b2["_wk"] = _cw_b2["시작일"].astype(str).str.strip().map(_daymap)
@@ -2017,7 +2016,7 @@ elif page == "🧭 사업구분별 현황":
             _row["안부확인율(%)"] = None
 
         # 안부체크율 — 해당 주차 발송/응답 합산
-        _chk_b = biz_filter_df(_checkin_rate_all, _biz)
+        _chk_b = biz_filter_df_gubn(_checkin_rate_all, _biz, _gubn) if _biz == "통합돌봄" else biz_filter_df(_checkin_rate_all, _biz)
         if not _chk_b.empty and "안부체크발송" in _chk_b.columns:
             _chk_b2 = _chk_b.copy()
             _chk_b2["_wk"] = _chk_b2["시작일"].astype(str).str.strip().map(_daymap)
@@ -2034,7 +2033,8 @@ elif page == "🧭 사업구분별 현황":
 
         # 심혈관/스트레스 이용비중 — 시트에 내장된 비율 대신 직접 계산 (이용자수 ÷ 가입완료)
         if not _cardio_row.empty:
-            _c_cnt, _ = biz_agg_raw(_cardio_row, _biz, _cardio_wc)
+            _c_cnt, _ = (biz_agg_raw_gubn(_cardio_row, _biz, _cardio_wc, _gubn) if _biz == "통합돌봄"
+                         else biz_agg_raw(_cardio_row, _biz, _cardio_wc))
             _row["심혈관 이용자(명)"] = int(_c_cnt.iloc[0]) if _c_cnt is not None else None
             _row["심혈관 이용비중(%)"] = (round(_c_cnt.iloc[0] / _reg_completed * 100, 1)
                                     if _c_cnt is not None and _reg_completed > 0 else None)
@@ -2043,7 +2043,8 @@ elif page == "🧭 사업구분별 현황":
             _row["심혈관 이용비중(%)"] = None
 
         if not _stress_row.empty:
-            _s_cnt, _ = biz_agg_raw(_stress_row, _biz, _stress_wc)
+            _s_cnt, _ = (biz_agg_raw_gubn(_stress_row, _biz, _stress_wc, _gubn) if _biz == "통합돌봄"
+                         else biz_agg_raw(_stress_row, _biz, _stress_wc))
             _row["스트레스 이용자(명)"] = int(_s_cnt.iloc[0]) if _s_cnt is not None else None
             _row["스트레스 이용비중(%)"] = (round(_s_cnt.iloc[0] / _reg_completed * 100, 1)
                                     if _s_cnt is not None and _reg_completed > 0 else None)
@@ -2052,7 +2053,8 @@ elif page == "🧭 사업구분별 현황":
             _row["스트레스 이용비중(%)"] = None
 
         # 건강상담 — 해당 주차 일평균
-        _hc_b = biz_filter_df(_hc_all, _biz, col="지자체")
+        _hc_b = (biz_filter_df_gubn(_hc_all, _biz, _gubn, col="지자체") if _biz == "통합돌봄"
+                 else biz_filter_df(_hc_all, _biz, col="지자체"))
         if not _hc_b.empty and "합계" in _hc_b.columns:
             _hc_b2 = _hc_b.copy()
             _hc_b2["_wk"] = _hc_b2["날짜"].astype(str).str.strip().map(_daymap)
@@ -2062,7 +2064,8 @@ elif page == "🧭 사업구분별 현황":
             _row["건강상담 건수(일평균)"] = None
 
         # 걸음수 — 해당 주차 일평균
-        _steps_b = biz_filter_df(_steps_all, _biz, col="agencyName")
+        _steps_b = (biz_filter_df_gubn(_steps_all, _biz, _gubn, col="agencyName") if _biz == "통합돌봄"
+                    else biz_filter_df(_steps_all, _biz, col="agencyName"))
         if not _steps_b.empty and "date" in _steps_b.columns:
             _steps_b2 = _steps_b.copy()
             _steps_b2["_dstr"] = pd.to_datetime(_steps_b2["date"], errors="coerce").dt.strftime("%Y-%m-%d")
@@ -2072,7 +2075,15 @@ elif page == "🧭 사업구분별 현황":
         else:
             _row["걸음수 참여자(명)"] = None
 
-        _rows.append(_row)
+        return _row
+
+    _rows = []
+    for _biz in _biz_list:
+        _rows.append(_compute_biz_row(_biz))
+        # 통합돌봄만 바로 아래에 베이직/세이프 하위 구분으로 추가 표시
+        if _biz == "통합돌봄":
+            _rows.append(_compute_biz_row("통합돌봄", "베이직"))
+            _rows.append(_compute_biz_row("통합돌봄", "세이프"))
 
     biz_status_df = pd.DataFrame(_rows)
 
@@ -2084,9 +2095,11 @@ elif page == "🧭 사업구분별 현황":
         return f"{v:,}{suffix}"
 
     for _, r in biz_status_df.iterrows():
-        _color = BUSINESS_TYPE_COLORS.get(r["사업구분"], "#666")
+        _is_sub = "-" in r["사업구분"]
+        _color = BUSINESS_TYPE_COLORS.get(r["사업구분"].split("-")[0], "#666")
+        _indent = "margin-left:24px;" if _is_sub else ""
         st.markdown(f"""<div style="border-left:6px solid {_color};background:#fff;border-radius:10px;
-            padding:14px 18px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            padding:14px 18px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.06);{_indent}">
             <div style="font-size:16px;font-weight:800;color:{_color};margin-bottom:8px">{r['사업구분']}
                 <span style="font-size:12px;font-weight:500;color:#6b7488"> · 지자체 {r['지자체수']}개 · 이용자(협약) {r['이용자(협약)']:,}명</span>
             </div>
