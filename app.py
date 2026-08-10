@@ -1131,7 +1131,7 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
 
         view_mode = st.radio(
             "표시 모드", ["전체", "Top 5", "Bottom 5", "Top 5 + Bottom 5"],
-            index=3, horizontal=True, key=f"view_{hash(title) % 100000}"
+            index=0, horizontal=True, key=f"view_{hash(title) % 100000}"
         )
         if view_mode == "Top 5":
             df_long = df_long[df_long["지자체명"].isin(top5)]
