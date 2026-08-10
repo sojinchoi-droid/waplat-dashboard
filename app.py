@@ -1197,6 +1197,75 @@ def active_muni_list(biz):
     active = reg_b[reg_b["협약인원"].apply(safe_numeric) > 0]
     return sorted(active["지자체명"].astype(str).str.strip().unique().tolist())
 
+def tonghap_gubn_munis():
+    """통합돌봄 사업구분 내 활성 지자체(협약인원>0)를 이용자현황 시트 G열(구분) 원본값
+    기준으로 베이직/세이프 두 그룹으로 나눈 지자체명 목록 (세이프 플러스는 세이프로 묶음).
+    임의 계산이 아니라 시트에 실제 기재된 구분값을 그대로 사용."""
+    reg = data.get("registration", pd.DataFrame())
+    tb = biz_filter_df(reg, "통합돌봄")
+    if tb.empty or "구분" not in tb.columns or "협약인원" not in tb.columns:
+        return {"베이직": [], "세이프": []}
+    tb = tb[tb["협약인원"].apply(safe_numeric) > 0].copy()
+    tb["구분"] = tb["구분"].astype(str).str.replace("\n", " ", regex=False).str.strip()
+    basic = sorted(tb.loc[tb["구분"] == "베이직", "지자체명"].astype(str).str.strip().unique().tolist())
+    safe = sorted(tb.loc[tb["구분"].str.contains("세이프", na=False), "지자체명"].astype(str).str.strip().unique().tolist())
+    return {"베이직": basic, "세이프": safe}
+
+def tonghap_gubn_selector(key):
+    """통합돌봄 선택 시에만 노출하는 베이직/세이프 하위 선택 위젯."""
+    return st.radio("통합돌봄 상품구분 (베이직/세이프)", ["전체", "베이직", "세이프"], horizontal=True,
+                    key=f"tbgubn_{key}")
+
+def biz_gubn_label(biz, gubn="전체"):
+    """차트 제목 등에 쓰는 라벨 — 통합돌봄+베이직/세이프 선택 시 '통합돌봄-세이프'처럼 표시."""
+    if biz == "통합돌봄" and gubn != "전체":
+        return f"{biz}-{gubn}"
+    return biz
+
+def _muni_name_match(name, candidates):
+    """지자체명 문자열이 candidates 목록 중 하나와 (공백 무시) 일치/부분일치하는지 확인."""
+    name_n = str(name).replace(" ", "")
+    for c in candidates:
+        c_n = str(c).replace(" ", "")
+        if c_n == name_n or c_n in name_n or name_n in c_n:
+            return True
+    return False
+
+def biz_filter_df_gubn(df, biz, gubn="전체", col="지자체명"):
+    """biz_filter_df + 통합돌봄 베이직/세이프 하위 필터.
+    biz가 통합돌봄이고 gubn이 베이직/세이프로 지정되면, 이용자현황 시트 구분(G열)
+    기준 실제 지자체 목록으로 한번 더 걸러서 다른 지자체 값이 섞이지 않게 한다."""
+    out = biz_filter_df(df, biz, col=col)
+    if biz == "통합돌봄" and gubn != "전체" and not out.empty and col in out.columns:
+        munis = tonghap_gubn_munis().get(gubn, [])
+        if not munis:
+            return out.iloc[0:0]
+        out = out[out[col].apply(lambda n: _muni_name_match(n, munis))]
+    return out
+
+def biz_agg_raw_gubn(df, biz, week_col, gubn="전체"):
+    """biz_agg_raw + 통합돌봄 베이직/세이프 하위 필터 (와이드 포맷 지자체별 컬럼 시트용).
+    지자체별 컬럼 중 베이직/세이프 목록에 없는 지자체 컬럼은 합산에서 제외한다.
+    (ratio는 이 두 페이지에서 실제 가입완료 인원으로 별도 계산하므로 여기선 None 반환)"""
+    if biz != "통합돌봄" or gubn == "전체":
+        return biz_agg_raw(df, biz, week_col)
+    if df.empty:
+        return None, None
+    munis = tonghap_gubn_munis().get(gubn, [])
+    if not munis:
+        return None, None
+
+    skip = {"이용자비중", "합계", "비중", "전체", "_"}
+    count_cols = [c for c in df.columns
+                  if c != week_col
+                  and not any(kw in str(c) for kw in skip)]
+    matched_count = [c for c in count_cols
+                     if _muni_name_match(str(c).replace("\n", " ").strip(), munis)]
+    if not matched_count:
+        return None, None
+    biz_count = df[matched_count].apply(lambda s: s.apply(safe_numeric)).sum(axis=1)
+    return biz_count, None
+
 def biz_filter_wide_cols(cols, biz):
     """Wide-format DataFrame의 컬럼 목록에서 선택된 사업구분 소속 지자체 컬럼만 반환.
     biz == '전체'면 원본 그대로 반환."""
@@ -2275,10 +2344,11 @@ elif page == "👥 1.회원가입 & 이탈":
     st.markdown('<div class="section-header">👥 회원가입 및 앱 삭제자 현황</div>', unsafe_allow_html=True)
     p_start, p_end = page_week_range_selector("member", weeks)
     selected_biz = biz_selector("회원가입이탈")
+    _tb_gubn = tonghap_gubn_selector("member") if selected_biz == "통합돌봄" else "전체"
     st.divider()
 
     # 지자체별 회원가입 현황
-    reg = biz_filter_df(data.get("registration", pd.DataFrame()).copy(), selected_biz)
+    reg = biz_filter_df_gubn(data.get("registration", pd.DataFrame()).copy(), selected_biz, _tb_gubn)
     wu = data.get("weekly_users", pd.DataFrame())
 
     if not reg.empty and "지자체명" in reg.columns:
@@ -2393,7 +2463,7 @@ elif page == "👥 1.회원가입 & 이탈":
 
             mun_reg_df = data.get("weekly_registered_by_mun", pd.DataFrame())
             reg_snapshot = data.get("registration", pd.DataFrame())
-            mun_biz = biz_filter_df(mun_reg_df.copy(), selected_biz, col="지자체명") if not mun_reg_df.empty else pd.DataFrame()
+            mun_biz = biz_filter_df_gubn(mun_reg_df.copy(), selected_biz, _tb_gubn, col="지자체명") if not mun_reg_df.empty else pd.DataFrame()
 
             if not mun_biz.empty and "주차" in mun_biz.columns:
                 weeks_set = set(wu_chart["주차"].astype(str).str.strip().tolist())
@@ -2403,7 +2473,7 @@ elif page == "👥 1.회원가입 & 이탈":
 
                 # 대상자 수: registration 스냅샷에서 biz 소속 지자체 협약인원 합산 (주차별 고정값)
                 if not reg_snapshot.empty and "협약인원" in reg_snapshot.columns:
-                    reg_biz = biz_filter_df(reg_snapshot.copy(), selected_biz)
+                    reg_biz = biz_filter_df_gubn(reg_snapshot.copy(), selected_biz, _tb_gubn)
                     biz_target = int(reg_biz["협약인원"].apply(safe_numeric).sum())
                 else:
                     biz_target = 0
@@ -2434,7 +2504,7 @@ elif page == "👥 1.회원가입 & 이탈":
                     secondary_y=True,
                 )
                 fig_biz.update_layout(
-                    title=f"주차별 {selected_biz} 대상자 수 대비 회원가입 완료 비중",
+                    title=f"주차별 {biz_gubn_label(selected_biz, _tb_gubn)} 대상자 수 대비 회원가입 완료 비중",
                     height=420, margin=dict(t=40, b=30),
                     hovermode="x unified", barmode="group",
                     legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
@@ -2533,7 +2603,7 @@ elif page == "👥 1.회원가입 & 이탈":
     del_df = data.get("app_deletion", pd.DataFrame())
     if not del_df.empty and selected_week:
         st.markdown('<div class="section-header">지자체별 앱 삭제율</div>', unsafe_allow_html=True)
-        week_del = biz_filter_df(del_df[del_df["주차"].astype(str).str.strip() == selected_week].copy(), selected_biz)
+        week_del = biz_filter_df_gubn(del_df[del_df["주차"].astype(str).str.strip() == selected_week].copy(), selected_biz, _tb_gubn)
         if not week_del.empty:
             # 앱삭제율이 0이고 다른 지표도 없는 지자체 제외 (계약 종료)
             # 히트맵에 있는 활성 지자체만 표시
@@ -2555,6 +2625,7 @@ elif page == "👥 1.회원가입 & 이탈":
 elif page == "🖐 2.안부확인":
     st.markdown('<div class="section-header">🖐 안부확인 현황</div>', unsafe_allow_html=True)
     selected_biz = biz_selector("안부확인")
+    _tb_gubn = tonghap_gubn_selector("safety") if selected_biz == "통합돌봄" else "전체"
     st.divider()
 
     # DB에서 안부확인 raw 데이터 조회
@@ -2598,7 +2669,7 @@ elif page == "🖐 2.안부확인":
 
         # 사업구분 필터: agency_name 기준으로 소속 지자체만 유지
         if selected_biz != "전체" and "agency_name" in safety_db.columns:
-            safety_db = biz_filter_df(safety_db, selected_biz, col="agency_name")
+            safety_db = biz_filter_df_gubn(safety_db, selected_biz, _tb_gubn, col="agency_name")
 
         # 일별 전체 합산
         agg_cols = {
@@ -2791,9 +2862,9 @@ elif page == "🖐 2.안부확인":
                 st.plotly_chart(fig_cr, use_container_width=True)
 
             # 지자체별 안부확인율 — C:AK(분모)/AL:BT(분자) 직접 계산 바 차트
-            cr_direct = biz_filter_df(data.get("checkin_mun_rate_direct", pd.DataFrame()), selected_biz)
+            cr_direct = biz_filter_df_gubn(data.get("checkin_mun_rate_direct", pd.DataFrame()), selected_biz, _tb_gubn)
             # 0%도 포함해서 전체 지자체(29개) 목록 표시 — registration 기준으로 빠진 지자체 추가
-            _all_muns_reg = biz_filter_df(data.get("registration", pd.DataFrame()), selected_biz)
+            _all_muns_reg = biz_filter_df_gubn(data.get("registration", pd.DataFrame()), selected_biz, _tb_gubn)
             if not cr_direct.empty and not _all_muns_reg.empty and "지자체명" in _all_muns_reg.columns:
                 _latest_d = cr_direct["시작일"].iloc[0] if "시작일" in cr_direct.columns else ""
                 _existing = set(cr_direct["지자체명"].tolist())
@@ -2848,7 +2919,7 @@ elif page == "🖐 2.안부확인":
             if not _mw_all.empty and "시작일" in _mw_all.columns:
                 if selected_biz != "전체":
                     # 선택된 사업구분의 지자체별 + 집계 라인
-                    _mw_biz = biz_filter_df(_mw_all, selected_biz, col="지자체명")
+                    _mw_biz = biz_filter_df_gubn(_mw_all, selected_biz, _tb_gubn, col="지자체명")
                     if not _mw_biz.empty:
                         _mw_biz = _mw_biz.copy()
                         _mw_biz["주차"] = _mw_biz["시작일"].apply(date_to_week_label)
@@ -2871,20 +2942,20 @@ elif page == "🖐 2.안부확인":
                                 ))
                             fig_cr_biz.add_trace(go.Scatter(
                                 x=_agg_cr["주차"], y=_agg_cr["안부확인율"],
-                                mode="lines+markers", name=f"{selected_biz} 평균",
+                                mode="lines+markers", name=f"{biz_gubn_label(selected_biz, _tb_gubn)} 평균",
                                 line=dict(color="#FF6F00", width=3),
                                 marker=dict(size=7, symbol="diamond"),
-                                hovertemplate=f"<b>%{{x}}</b><br>{selected_biz} 평균: %{{y:.1f}}%<extra></extra>",
+                                hovertemplate=f"<b>%{{x}}</b><br>{biz_gubn_label(selected_biz, _tb_gubn)} 평균: %{{y:.1f}}%<extra></extra>",
                             ))
                             fig_cr_biz.update_layout(
-                                title=f"주차별 {selected_biz} 지자체별 안부확인율 추이",
+                                title=f"주차별 {biz_gubn_label(selected_biz, _tb_gubn)} 지자체별 안부확인율 추이",
                                 height=460, hovermode="x unified",
                                 xaxis=dict(type="category", tickangle=-45),
                                 yaxis=dict(title="안부확인율 (%)", range=[0, 110]),
                                 margin=dict(t=40, b=90),
                                 legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
                             )
-                            st.plotly_chart(fig_cr_biz, use_container_width=True)
+                            st.plotly_chart(fig_cr_biz, use_container_width=True, key="cr_biz_tab3")
                 else:
                     # 전체: 사업구분별 집계 라인 비교
                     _mw_all2 = _mw_all.copy()
@@ -2963,7 +3034,7 @@ elif page == "🖐 2.안부확인":
         # ── Tab 6: 주차별 추이 (사업구분 필터 반영)
         with tab6:
             if not weekly.empty and "week" in weekly.columns:
-                biz_label = f" ({selected_biz})" if selected_biz != "전체" else ""
+                biz_label = f" ({biz_gubn_label(selected_biz, _tb_gubn)})" if selected_biz != "전체" else ""
                 st.markdown(f"**주차별 안부확인 추이{biz_label}** — {weekly['week'].min()} ~ {weekly['week'].max()}")
 
                 fig_w = make_subplots(specs=[[{"secondary_y": True}]])
@@ -3012,7 +3083,7 @@ elif page == "🖐 2.안부확인":
             if selected_biz != "전체":
                 mun_weekly = data.get("checkin_mun_weekly", pd.DataFrame())
                 if not mun_weekly.empty and "시작일" in mun_weekly.columns:
-                    mun_biz = biz_filter_df(mun_weekly, selected_biz, col="지자체명")
+                    mun_biz = biz_filter_df_gubn(mun_weekly, selected_biz, _tb_gubn, col="지자체명")
                     if not mun_biz.empty:
                         mun_biz = mun_biz.copy()
                         mun_biz["주차"] = mun_biz["시작일"].apply(date_to_week_label)
@@ -3030,7 +3101,7 @@ elif page == "🖐 2.안부확인":
                                 agg_w["분자"] / agg_w["분모"].replace(0, float("nan")) * 100
                             ).round(1).fillna(0)
 
-                            st.markdown(f"**{selected_biz} 지자체별 주차별 안부확인율**")
+                            st.markdown(f"**{biz_gubn_label(selected_biz, _tb_gubn)} 지자체별 주차별 안부확인율**")
                             _biz_colors = [
                                 "#42A5F5", "#66BB6A", "#AB47BC", "#EC407A",
                                 "#26C6DA", "#FFA726", "#8D6E63", "#78909C",
@@ -3050,20 +3121,20 @@ elif page == "🖐 2.안부확인":
                                 ))
                             fig_mw.add_trace(go.Scatter(
                                 x=agg_w["주차"], y=agg_w["안부확인율"],
-                                mode="lines+markers", name=f"{selected_biz} 평균",
+                                mode="lines+markers", name=f"{biz_gubn_label(selected_biz, _tb_gubn)} 평균",
                                 line=dict(color="#FF6F00", width=3),
                                 marker=dict(size=7, symbol="diamond"),
-                                hovertemplate=f"<b>%{{x}}</b><br>{selected_biz} 평균: %{{y:.1f}}%<extra></extra>",
+                                hovertemplate=f"<b>%{{x}}</b><br>{biz_gubn_label(selected_biz, _tb_gubn)} 평균: %{{y:.1f}}%<extra></extra>",
                             ))
                             fig_mw.update_layout(
-                                title=f"주차별 {selected_biz} 지자체별 안부확인율 추이",
+                                title=f"주차별 {biz_gubn_label(selected_biz, _tb_gubn)} 지자체별 안부확인율 추이",
                                 height=460, hovermode="x unified",
                                 xaxis=dict(type="category", tickangle=-45),
                                 yaxis=dict(title="안부확인율 (%)", range=[0, 110]),
                                 margin=dict(t=40, b=90),
                                 legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
                             )
-                            st.plotly_chart(fig_mw, use_container_width=True)
+                            st.plotly_chart(fig_mw, use_container_width=True, key="cr_biz_tab6")
 
         # ── Tab 7: 일자별 전체 데이터 테이블 (Google Sheets gid=261480368 형태)
         with tab7:
@@ -3265,6 +3336,7 @@ elif page == "🖐 2.안부확인":
 elif page == "❤ 6.심혈관체크":
     st.markdown('<div class="section-header">❤ 심혈관체크</div>', unsafe_allow_html=True)
     selected_biz = biz_selector("심혈관")
+    _tb_gubn = tonghap_gubn_selector("cardio") if selected_biz == "통합돌봄" else "전체"
     st.divider()
 
     p_start, p_end = page_week_range_selector("cardio", weeks)
@@ -3298,21 +3370,21 @@ elif page == "❤ 6.심혈관체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_cnt, _ = biz_agg_raw(cu, selected_biz, _wc)
+                        _biz_cnt, _ = biz_agg_raw_gubn(cu, selected_biz, _wc, _tb_gubn)
                         if _biz_cnt is not None:
                             cu = cu.copy()
                             cu["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
                             # 시트 내장 이용비중 대신 실제 가입완료 인원으로 직접 계산
-                            _biz_completed = biz_filter_df(data.get("registration", pd.DataFrame()), selected_biz)["가입완료"].apply(safe_numeric).sum()
+                            _biz_completed = biz_filter_df_gubn(data.get("registration", pd.DataFrame()), selected_biz, _tb_gubn)["가입완료"].apply(safe_numeric).sum()
                             if _biz_completed > 0:
                                 cu["_rc"] = (_biz_cnt / _biz_completed * 100).round(1)
                                 _rc = "_rc"
                     plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#EF5350",
                                        _rc, "이용비중", "#FF6F00",
-                                       "심혈관체크 이용자수 + 이용비중")
+                                       f"심혈관체크 이용자수 + 이용비중 ({biz_gubn_label(selected_biz, _tb_gubn)})" if selected_biz != "전체" else "심혈관체크 이용자수 + 이용비중")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
-            mrt_cardio = biz_filter_df(extract_mun_ratio_trend(cardio_user_raw), selected_biz)
+            mrt_cardio = biz_filter_df_gubn(extract_mun_ratio_trend(cardio_user_raw), selected_biz, _tb_gubn)
             if not mrt_cardio.empty:
                 mrt_cardio = filter_by_week_range(mrt_cardio, "주차", p_start, p_end, weeks)
                 _active_c = mrt_cardio.groupby("지자체명")["값"].sum()
@@ -3348,16 +3420,17 @@ elif page == "❤ 6.심혈관체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_cnt, _ = biz_agg_raw(ce, selected_biz, _wc)
+                        _biz_cnt, _ = biz_agg_raw_gubn(ce, selected_biz, _wc, _tb_gubn)
                         if _biz_cnt is not None:
                             ce = ce.copy()
                             ce["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
                     plot_bar_rate_dual(ce, _wc, bar_col_use, "검사횟수", "#EF5350",
                                        _awc, "1인 주평균", "#455A64",
-                                       "심혈관 검사횟수 + 1인 주평균", bar_unit="회", line_unit="회")
+                                       f"심혈관 검사횟수 + 1인 주평균 ({biz_gubn_label(selected_biz, _tb_gubn)})" if selected_biz != "전체" else "심혈관 검사횟수 + 1인 주평균",
+                                       bar_unit="회", line_unit="회")
             cf = filter_by_week_range(cardio_exam, "주차", p_start, p_end, weeks) if not cardio_exam.empty else pd.DataFrame()
-            cf = biz_filter_df(cf, selected_biz)
+            cf = biz_filter_df_gubn(cf, selected_biz, _tb_gubn)
             if not cf.empty:
                 plot_municipality_lines(cf, "지자체별 심혈관 검사횟수 추이", metric_label="검사횟수")
         else:
@@ -3507,6 +3580,7 @@ elif page == "💊 8.복약관리":
 elif page == "📊 3.안부체크율":
     st.markdown('<div class="section-header">📊 안부체크율</div>', unsafe_allow_html=True)
     selected_biz = biz_selector("안부체크율")
+    _tb_gubn = tonghap_gubn_selector("checkrate") if selected_biz == "통합돌봄" else "전체"
     st.divider()
 
     # ── 전체 안부체크율(OFF 제외) 추이 — gid=261480368 AB열 (전체일 때만 표시)
@@ -3546,8 +3620,8 @@ elif page == "📊 3.안부체크율":
             st.plotly_chart(fig_ab, use_container_width=True)
             st.markdown("---")
 
-    cr_check_direct = biz_filter_df(data.get("checkin_mun_check_direct", pd.DataFrame()), selected_biz)
-    checkin_rate = biz_filter_df(data.get("checkin_municipality_rate", pd.DataFrame()), selected_biz)
+    cr_check_direct = biz_filter_df_gubn(data.get("checkin_mun_check_direct", pd.DataFrame()), selected_biz, _tb_gubn)
+    checkin_rate = biz_filter_df_gubn(data.get("checkin_municipality_rate", pd.DataFrame()), selected_biz, _tb_gubn)
 
     # biz 선택 시: 사업구분별 주차별 집계 안부체크율 차트
     if selected_biz != "전체" and not checkin_rate.empty and "안부체크율" in checkin_rate.columns:
@@ -3576,13 +3650,13 @@ elif page == "📊 3.안부체크율":
             fig_biz_cr = go.Figure()
             fig_biz_cr.add_trace(go.Scatter(
                 x=_wbiz["시작일"], y=_wbiz["_rate"],
-                mode="lines+markers", name=f"{selected_biz} 안부체크율",
+                mode="lines+markers", name=f"{biz_gubn_label(selected_biz, _tb_gubn)} 안부체크율",
                 line=dict(color="#2F5496", width=2.5), marker=dict(size=6),
                 fill="tozeroy", fillcolor="rgba(47,84,150,0.09)",
                 hovertemplate="<b>%{x}</b><br>안부체크율: %{y:.1f}%<extra></extra>",
             ))
             fig_biz_cr.update_layout(
-                title=f"{selected_biz} 주차별 안부체크율 추이",
+                title=f"{biz_gubn_label(selected_biz, _tb_gubn)} 주차별 안부체크율 추이",
                 height=340, hovermode="x unified",
                 xaxis=dict(type="category", tickangle=-45, title=""),
                 yaxis=dict(title="안부체크율 (%)", range=[0, 100]),
@@ -4407,6 +4481,7 @@ elif page == "👤 13.맞고(게스트)":
 elif page == "😰 7.스트레스체크":
     st.markdown('<div class="section-header">😰 스트레스체크</div>', unsafe_allow_html=True)
     selected_biz = biz_selector("스트레스")
+    _tb_gubn = tonghap_gubn_selector("stress") if selected_biz == "통합돌봄" else "전체"
     st.divider()
 
     p_start, p_end = page_week_range_selector("stress", weeks)
@@ -4438,21 +4513,21 @@ elif page == "😰 7.스트레스체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_cnt, _ = biz_agg_raw(su, selected_biz, _wc)
+                        _biz_cnt, _ = biz_agg_raw_gubn(su, selected_biz, _wc, _tb_gubn)
                         if _biz_cnt is not None:
                             su = su.copy()
                             su["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
                             # 시트 내장 이용비중 대신 실제 가입완료 인원으로 직접 계산
-                            _biz_completed = biz_filter_df(data.get("registration", pd.DataFrame()), selected_biz)["가입완료"].apply(safe_numeric).sum()
+                            _biz_completed = biz_filter_df_gubn(data.get("registration", pd.DataFrame()), selected_biz, _tb_gubn)["가입완료"].apply(safe_numeric).sum()
                             if _biz_completed > 0:
                                 su["_rc"] = (_biz_cnt / _biz_completed * 100).round(1)
                                 _rc = "_rc"
                     plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#AB47BC",
                                        _rc, "이용비중", "#FF6F00",
-                                       "스트레스체크 이용자수 + 이용비중")
+                                       f"스트레스체크 이용자수 + 이용비중 ({biz_gubn_label(selected_biz, _tb_gubn)})" if selected_biz != "전체" else "스트레스체크 이용자수 + 이용비중")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
-            mrt_stress = biz_filter_df(extract_mun_ratio_trend(stress_user_raw), selected_biz)
+            mrt_stress = biz_filter_df_gubn(extract_mun_ratio_trend(stress_user_raw), selected_biz, _tb_gubn)
             if not mrt_stress.empty:
                 mrt_stress = filter_by_week_range(mrt_stress, "주차", p_start, p_end, weeks)
                 _active_s = mrt_stress.groupby("지자체명")["값"].sum()
@@ -4488,16 +4563,17 @@ elif page == "😰 7.스트레스체크":
                     bar_col_use = _sum_col
                 if bar_col_use:
                     if selected_biz != "전체":
-                        _biz_cnt, _ = biz_agg_raw(se, selected_biz, _wc)
+                        _biz_cnt, _ = biz_agg_raw_gubn(se, selected_biz, _wc, _tb_gubn)
                         if _biz_cnt is not None:
                             se = se.copy()
                             se["_bar"] = _biz_cnt
                             bar_col_use = "_bar"
                     plot_bar_rate_dual(se, _wc, bar_col_use, "수행횟수", "#AB47BC",
                                        _awc, "1인 주평균", "#455A64",
-                                       "스트레스체크 수행횟수 + 1인 주평균", bar_unit="회", line_unit="회")
+                                       f"스트레스체크 수행횟수 + 1인 주평균 ({biz_gubn_label(selected_biz, _tb_gubn)})" if selected_biz != "전체" else "스트레스체크 수행횟수 + 1인 주평균",
+                                       bar_unit="회", line_unit="회")
             sf = filter_by_week_range(stress_count, "주차", p_start, p_end, weeks) if not stress_count.empty else pd.DataFrame()
-            sf = biz_filter_df(sf, selected_biz)
+            sf = biz_filter_df_gubn(sf, selected_biz, _tb_gubn)
             if not sf.empty:
                 plot_municipality_lines(sf, "지자체별 스트레스체크 수행횟수 추이", metric_label="수행횟수")
         else:
