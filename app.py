@@ -1237,14 +1237,24 @@ def biz_gubn_label(biz, gubn="전체"):
         return f"{biz}-{gubn}"
     return biz
 
-def _muni_name_match(name, candidates):
-    """지자체명 문자열이 candidates 목록 중 하나와 (공백 무시) 일치/부분일치하는지 확인."""
+def _muni_name_exact(name, candidates):
+    """지자체명 문자열이 candidates 목록 중 하나와 (공백 무시) 정확히 일치하는지 확인.
+    부분일치를 쓰면 "용인시청"(그 자체로 유효한 별개 지자체)이 "용인시청통합돌봄"의
+    부분문자열이라는 이유로 잘못 매칭되는 문제가 있었음 — 이 함수가 다루는 값들은
+    이미 extract_municipality_name() 등으로 정규화된 상태라 정확히 일치하는지만
+    보면 충분하고, 그게 더 안전함."""
     name_n = str(name).replace(" ", "")
+    return any(str(c).replace(" ", "") == name_n for c in candidates)
+
+def _muni_name_match_wide_col(col_text, candidates):
+    """와이드 포맷 시트의 원본 컬럼명(정규화 안 된 상태)이 candidates 중 하나에
+    해당하는지 확인 — match_municipality_keyword와 같은 원칙(정확히 일치 우선,
+    없으면 candidates 중 가장 긴 것과 부분일치)으로 컬럼명 안의 지자체를 찾는다."""
+    flat = str(col_text).replace("\n", "").replace(" ", "").strip()
     for c in candidates:
-        c_n = str(c).replace(" ", "")
-        if c_n == name_n or c_n in name_n or name_n in c_n:
+        if str(c).replace(" ", "") == flat:
             return True
-    return False
+    return any(str(c).replace(" ", "") in flat for c in candidates)
 
 def biz_filter_df_gubn(df, biz, gubn="전체", col="지자체명"):
     """biz_filter_df + 통합돌봄 베이직/세이프 하위 필터.
@@ -1255,7 +1265,7 @@ def biz_filter_df_gubn(df, biz, gubn="전체", col="지자체명"):
         munis = tonghap_gubn_munis().get(gubn, [])
         if not munis:
             return out.iloc[0:0]
-        out = out[out[col].apply(lambda n: _muni_name_match(n, munis))]
+        out = out[out[col].apply(lambda n: _muni_name_exact(n, munis))]
     return out
 
 def biz_agg_raw_gubn(df, biz, week_col, gubn="전체"):
@@ -1275,7 +1285,7 @@ def biz_agg_raw_gubn(df, biz, week_col, gubn="전체"):
                   if c != week_col
                   and not any(kw in str(c) for kw in skip)]
     matched_count = [c for c in count_cols
-                     if _muni_name_match(str(c).replace("\n", " ").strip(), munis)]
+                     if _muni_name_match_wide_col(c, munis)]
     if not matched_count:
         return None, None
     biz_count = df[matched_count].apply(lambda s: s.apply(safe_numeric)).sum(axis=1)
