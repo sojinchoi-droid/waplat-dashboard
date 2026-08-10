@@ -2083,6 +2083,9 @@ elif page == "🧭 사업구분별 현황":
 
     st.caption("⚠ 복약관리·생활상담은 지자체별 원본 데이터가 없어 사업구분별 집계가 불가능해 표에서 제외했습니다. "
                "맞고(와플랫+게스트)·맞고(게스트)도 동일한 이유로 제외됩니다.")
+    st.caption("⚠ 가입률·심혈관/스트레스 이용비중은 현재 시점 협약인원·가입완료 인원을 분모로 계산했습니다. "
+               "과거 주차를 선택했을 때 그 지자체의 협약인원·가입완료가 지금과 달랐다면 표시된 값이 실제보다 "
+               "높거나 100%를 넘어 보일 수 있습니다.")
 
     # ---- 통합돌봄 상품 구성 (베이직/세이프) — 이용자현황 시트 "구분" 컬럼(G열) 기준 ----
     if "통합돌봄" in _biz_list:
@@ -2513,6 +2516,8 @@ elif page == "👥 1.회원가입 & 이탈":
                 fig_biz.update_yaxes(title_text="명", secondary_y=False)
                 fig_biz.update_yaxes(title_text="가입률 (%)", secondary_y=True, range=[0, 110])
                 st.plotly_chart(fig_biz, use_container_width=True)
+                st.caption("※ 대상자 수(협약인원)는 현재 시점 기준 고정값으로 계산했습니다 (주차별 협약인원 이력 데이터 없음). "
+                           "과거 협약인원이 지금과 달랐다면 그 주차의 가입률이 실제보다 높거나 100%를 넘어 보일 수 있습니다.")
             else:
                 st.info(f"{selected_biz} 해당 지자체의 주차별 가입완료 데이터가 없습니다.")
 
@@ -2733,7 +2738,17 @@ elif page == "🖐 2.안부확인":
         # 안부체크응답률: off 대상자 반영 (2025-11-15 이후)
         # off 대상자 = 안부체크 발송을 끈 이용자 (분모에서 제외)
         from sheets_data import get_check_off_users as _get_off
-        _off_total = sum(_get_off(sheets).values()) if sheets else 0
+        # off대상자는 전체 지자체 기준으로 나오는데, 사업구분(+통합돌봄 하위) 필터가
+        # 걸려서 alarm_send_count가 해당 지자체만으로 줄어든 상태라면 off도 같이
+        # 줄여야 함 — 안 그러면 필터링된(작은) 발송수에서 전체 off를 다 빼서
+        # 응답률이 실제보다 부풀려지는 문제가 있었음
+        _off_dict = _get_off(sheets) if sheets else {}
+        if selected_biz != "전체" and _off_dict:
+            _off_df = pd.DataFrame({"지자체명": list(_off_dict.keys()), "off": list(_off_dict.values())})
+            _off_df = biz_filter_df_gubn(_off_df, selected_biz, _tb_gubn)
+            _off_total = _off_df["off"].sum()
+        else:
+            _off_total = sum(_off_dict.values())
         if "안부체크응답률" not in daily.columns or daily["안부체크응답률"].sum() == 0:
             _send = daily["alarm_send_count"].copy()
             # 2025-11-15 이후 데이터만 off 대상자 차감
@@ -3383,6 +3398,9 @@ elif page == "❤ 6.심혈관체크":
                     plot_bar_rate_dual(cu, _wc, bar_col_use, "이용자수", "#EF5350",
                                        _rc, "이용비중", "#FF6F00",
                                        f"심혈관체크 이용자수 + 이용비중 ({biz_gubn_label(selected_biz, _tb_gubn)})" if selected_biz != "전체" else "심혈관체크 이용자수 + 이용비중")
+                    if selected_biz != "전체":
+                        st.caption("※ 이용비중은 현재 시점 가입완료 인원 기준으로 계산했습니다. 과거 가입완료 인원이 "
+                                   "지금과 달랐다면 과거 주차의 이용비중이 실제보다 높거나 100%를 넘어 보일 수 있습니다.")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
             mrt_cardio = biz_filter_df_gubn(extract_mun_ratio_trend(cardio_user_raw), selected_biz, _tb_gubn)
             if not mrt_cardio.empty:
@@ -4357,6 +4375,9 @@ elif page == "🃏 11.맞고(와플랫)":
                     plot_bar_rate_dual(mu, _wc, _sum_col, "이용자수", "#42A5F5",
                                        _rc, "이용비중" if selected_biz != "전체" else "전체이용비중", "#FF6F00",
                                        "맞고(와플랫) 이용자수 + 이용비중")
+                    if selected_biz != "전체":
+                        st.caption("※ 이용비중은 현재 시점 가입완료 인원 기준으로 계산했습니다. 과거 가입완료 인원이 "
+                                   "지금과 달랐다면 과거 주차의 이용비중이 실제보다 높거나 100%를 넘어 보일 수 있습니다.")
             if not df.empty:
                 dff = biz_filter_df(filter_by_week_range(df, "주차", p_start, p_end, weeks), selected_biz)
                 plot_municipality_lines(dff, "지자체별 맞고 이용자수", metric_label="이용자수")
@@ -4526,6 +4547,9 @@ elif page == "😰 7.스트레스체크":
                     plot_bar_rate_dual(su, _wc, bar_col_use, "이용자수", "#AB47BC",
                                        _rc, "이용비중", "#FF6F00",
                                        f"스트레스체크 이용자수 + 이용비중 ({biz_gubn_label(selected_biz, _tb_gubn)})" if selected_biz != "전체" else "스트레스체크 이용자수 + 이용비중")
+                    if selected_biz != "전체":
+                        st.caption("※ 이용비중은 현재 시점 가입완료 인원 기준으로 계산했습니다. 과거 가입완료 인원이 "
+                                   "지금과 달랐다면 과거 주차의 이용비중이 실제보다 높거나 100%를 넘어 보일 수 있습니다.")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
             mrt_stress = biz_filter_df_gubn(extract_mun_ratio_trend(stress_user_raw), selected_biz, _tb_gubn)
             if not mrt_stress.empty:

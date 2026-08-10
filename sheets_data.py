@@ -1011,18 +1011,23 @@ def get_app_deletion_data(sheets: dict) -> pd.DataFrame:
 
 
 def get_mun_check_rate_direct() -> pd.DataFrame:
-    """안부확인지자체 시트 QF:RJ(지자체별 "안부체크율1" 컬럼 전체)에서 안부체크율 직접 읽기
+    """안부확인지자체 시트 QF~(지자체별 "안부체크율1" 컬럼 전체)에서 안부체크율 직접 읽기
 
     (예전엔 PH:QJ를 썼는데, 지자체가 늘면서 안부체크율1 컬럼 그룹이 오른쪽으로
     밀려나 일부만 걸리고 나머지는 다른 컬럼(안부콜응답률)이 섞여 들어가거나
     아예 빠져서 0으로 잘못 표시되는 버그가 있었음 — 예: 포천시청가 QF:RJ 안에
     있는데 PH:QJ 범위엔 안 걸려서 0%로 잘못 나왔음)
 
+    QF:RJ로 고쳤을 때도 RJ가 당시 시트의 마지막 컬럼과 정확히 일치해서 여유가
+    0이었음 — 지자체가 하나만 더 늘어도 이 블록이 RJ를 넘어가면서 같은 버그가
+    바로 재발하는 구조였음. 끝 경계를 ZZ까지 넉넉히 잡아 앞으로 지자체가 계속
+    늘어도 안 깨지게 함 (이름 매칭으로 걸러내므로 범위를 넓게 잡아도 안전함).
+
     최신 행(마지막 주차)의 값을 반환. 값 형식 "X%"는 safe_numeric으로 처리.
     Returns: DataFrame [지자체명, 안부체크율]
     """
     GID = SHEET_GIDS["안부확인지자체"]
-    url = BASE_URL + GID + "&range=QF:RJ"
+    url = BASE_URL + GID + "&range=QF:ZZ"
     try:
         resp = requests.get(url, timeout=30)
         resp.raise_for_status()
@@ -1291,11 +1296,15 @@ def get_checkin_municipality_rate(sheets: dict) -> pd.DataFrame:
             if orig is not None and orig > 0 and send is not None and send > 0:
                 entry["안부체크율"] = orig
             elif send is not None and resp is not None and send > 0:
-                actual_target = send - off
-                if actual_target > 0:
-                    entry["안부체크율"] = round(resp / actual_target * 100, 1)
+                if off >= send:
+                    # off대상자 명단이 정리 안 돼서 발송인원보다 많아지는 경우(예: 희망나래
+                    # — off 11명 > 발송 8명). 이땐 off 보정 자체가 의미가 없으므로
+                    # (분모를 억지로 맞추면 0%로 지워지거나 200%처럼 더 엉뚱한 값이 나옴)
+                    # off 보정을 포기하고 원래 발송 기준으로 계산
+                    entry["안부체크율"] = round(resp / send * 100, 1)
                 else:
-                    entry["안부체크율"] = 0.0
+                    actual_target = send - off
+                    entry["안부체크율"] = round(resp / actual_target * 100, 1)
             else:
                 entry["안부체크율"] = None
 
