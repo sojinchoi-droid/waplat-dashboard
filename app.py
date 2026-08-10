@@ -985,7 +985,12 @@ def extract_mun_ratio_trend(raw_df: pd.DataFrame) -> pd.DataFrame:
         s = str(s).strip()
         # "경남사회서비스원 이용자비중\n이용자비중" 등 중복 제거
         s = s.replace("\n이용자비중", "").replace(" 이용자비중", "")
-        return s.strip()
+        s = s.strip()
+        # registration 등 다른 곳에서 쓰는 정식 지자체명으로 정규화
+        # (예: "용인시청 통합돌봄"(공백 있음, 시트 원본) → "용인시청통합돌봄"(정식 표기) —
+        # 정규화 안 하면 active_muni_list()로 0-패딩할 때 이름이 안 맞아서 같은
+        # 지자체가 두 줄로 중복 표시되는 문제가 있었음)
+        return extract_municipality_name(s)
 
     long["지자체명"] = long["_col"].apply(_mun_name)
     long = long.rename(columns={week_col: "주차"})
@@ -1196,12 +1201,12 @@ def biz_selector(key):
     return st.radio("사업구분 선택", opts, horizontal=True,
                     label_visibility="collapsed", key=f"biz_{key}")
 
-def active_muni_list(biz):
-    """현재 사업구분 선택에 해당하는 활성 지자체(협약인원>0) 이름 목록.
-    plot_municipality_lines(expected_munis=...)에 넘겨서 값이 0인 지자체도
-    항상 그래프에 나오게 하는 용도."""
+def active_muni_list(biz, gubn="전체"):
+    """현재 사업구분(+통합돌봄 베이직/세이프 하위) 선택에 해당하는 활성 지자체
+    (협약인원>0) 이름 목록. plot_municipality_lines(expected_munis=...)에 넘겨서
+    값이 0인 지자체도 항상 그래프에 나오게 하는 용도."""
     reg = data.get("registration", pd.DataFrame())
-    reg_b = biz_filter_df(reg, biz)
+    reg_b = biz_filter_df_gubn(reg, biz, gubn) if biz == "통합돌봄" else biz_filter_df(reg, biz)
     if reg_b.empty or "협약인원" not in reg_b.columns:
         return []
     active = reg_b[reg_b["협약인원"].apply(safe_numeric) > 0]
@@ -3415,11 +3420,9 @@ elif page == "❤ 6.심혈관체크":
             mrt_cardio = biz_filter_df_gubn(extract_mun_ratio_trend(cardio_user_raw), selected_biz, _tb_gubn)
             if not mrt_cardio.empty:
                 mrt_cardio = filter_by_week_range(mrt_cardio, "주차", p_start, p_end, weeks)
-                _active_c = mrt_cardio.groupby("지자체명")["값"].sum()
-                _active_c = _active_c[_active_c > 0].index.tolist()
-                mrt_cardio = mrt_cardio[mrt_cardio["지자체명"].isin(_active_c)]
-                if not mrt_cardio.empty:
-                    plot_municipality_lines(mrt_cardio, "지자체별 심혈관체크 이용자비중 추이 (%)", metric_label="이용자비중(%)")
+            # 값이 0인 지자체를 걸러내지 않고 expected_munis로 항상 전체 지자체가 나오게 함
+            plot_municipality_lines(mrt_cardio, "지자체별 심혈관체크 이용자비중 추이 (%)", metric_label="이용자비중(%)",
+                                     expected_munis=active_muni_list(selected_biz, _tb_gubn))
         else:
             st.info("심혈관 이용자 데이터가 없습니다.")
 
@@ -4564,11 +4567,9 @@ elif page == "😰 7.스트레스체크":
             mrt_stress = biz_filter_df_gubn(extract_mun_ratio_trend(stress_user_raw), selected_biz, _tb_gubn)
             if not mrt_stress.empty:
                 mrt_stress = filter_by_week_range(mrt_stress, "주차", p_start, p_end, weeks)
-                _active_s = mrt_stress.groupby("지자체명")["값"].sum()
-                _active_s = _active_s[_active_s > 0].index.tolist()
-                mrt_stress = mrt_stress[mrt_stress["지자체명"].isin(_active_s)]
-                if not mrt_stress.empty:
-                    plot_municipality_lines(mrt_stress, "지자체별 스트레스체크 이용자비중 추이 (%)", metric_label="이용자비중(%)")
+            # 값이 0인 지자체를 걸러내지 않고 expected_munis로 항상 전체 지자체가 나오게 함
+            plot_municipality_lines(mrt_stress, "지자체별 스트레스체크 이용자비중 추이 (%)", metric_label="이용자비중(%)",
+                                     expected_munis=active_muni_list(selected_biz, _tb_gubn))
         else:
             st.info("스트레스체크 이용자 데이터가 없습니다.")
 
