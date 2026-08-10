@@ -2115,6 +2115,66 @@ elif page == "🧭 사업구분별 현황":
             <div style="margin-top:8px;font-size:12px;color:#8a94a8">{r['지자체명목록']}</div>
         </div>""", unsafe_allow_html=True)
 
+    # ---- 통합돌봄 내 베이직·세이프 비중 (요청: "데이터 싹다") ----
+    if "통합돌봄" in _biz_list:
+        _basic_row = next((r for r in _rows if r["사업구분"] == "통합돌봄-베이직"), None)
+        _safe_row = next((r for r in _rows if r["사업구분"] == "통합돌봄-세이프"), None)
+        if _basic_row and _safe_row:
+            st.markdown('<div class="section-header">📐 통합돌봄 내 베이직·세이프 비중</div>', unsafe_allow_html=True)
+
+            _count_metrics = [
+                ("지자체수", "개"), ("이용자(협약)", "명"), ("가입수(명)", "명"),
+                ("심혈관 이용자(명)", "명"), ("스트레스 이용자(명)", "명"),
+                ("건강상담 건수(일평균)", "건"), ("걸음수 참여자(명)", "명"),
+            ]
+            _tbl_rows = []
+            for _key, _unit in _count_metrics:
+                _bn = _basic_row.get(_key) or 0
+                _sn = _safe_row.get(_key) or 0
+                _total = _bn + _sn
+                _b_pct = round(_bn / _total * 100, 1) if _total > 0 else None
+                _s_pct = round(_sn / _total * 100, 1) if _total > 0 else None
+                _tbl_rows.append({
+                    "지표": _key,
+                    "베이직": f"{_bn:,.0f}{_unit}", "베이직 비중": f"{_b_pct}%" if _b_pct is not None else "-",
+                    "세이프": f"{_sn:,.0f}{_unit}", "세이프 비중": f"{_s_pct}%" if _s_pct is not None else "-",
+                })
+
+            _rate_metrics = ["가입률(%)", "안부확인율(%)", "안부체크율(%)", "심혈관 이용비중(%)", "스트레스 이용비중(%)"]
+            for _key in _rate_metrics:
+                _b = _basic_row.get(_key)
+                _s = _safe_row.get(_key)
+                _tbl_rows.append({
+                    "지표": _key,
+                    "베이직": f"{_b}%" if _b is not None else "-", "베이직 비중": "-",
+                    "세이프": f"{_s}%" if _s is not None else "-", "세이프 비중": "-",
+                })
+
+            st.dataframe(pd.DataFrame(_tbl_rows), use_container_width=True, hide_index=True)
+            st.caption("※ '비중'은 베이직값+세이프값 합계 대비 각각의 비율입니다. "
+                       "가입률·안부확인율 등 이미 %인 비율 지표는 값 자체를 비교해서 보시면 되고 별도 비중은 표시하지 않았습니다.")
+
+            # 핵심 지표(이용자·가입수) 구성비 시각화
+            _viz_metrics = ["이용자(협약)", "가입수(명)", "심혈관 이용자(명)", "스트레스 이용자(명)"]
+            _fig_comp = go.Figure()
+            _fig_comp.add_trace(go.Bar(
+                y=_viz_metrics, x=[_basic_row.get(m) or 0 for m in _viz_metrics],
+                name="베이직", orientation="h", marker_color=BUSINESS_TYPE_COLORS.get("통합돌봄", "#42A5F5"),
+                text=[f"{(_basic_row.get(m) or 0):,.0f}" for m in _viz_metrics], textposition="inside",
+            ))
+            _fig_comp.add_trace(go.Bar(
+                y=_viz_metrics, x=[_safe_row.get(m) or 0 for m in _viz_metrics],
+                name="세이프", orientation="h", marker_color="#FF6F00",
+                text=[f"{(_safe_row.get(m) or 0):,.0f}" for m in _viz_metrics], textposition="inside",
+            ))
+            _fig_comp.update_layout(
+                barmode="stack", title="통합돌봄 핵심 지표 구성비 (베이직 vs 세이프)",
+                height=280, margin=dict(t=40, b=20, l=10, r=10),
+                legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+                xaxis=dict(title=""),
+            )
+            st.plotly_chart(_fig_comp, use_container_width=True)
+
     st.markdown("")
     with st.expander("📋 표로 보기 (상세 데이터)", expanded=False):
         st.dataframe(biz_status_df, use_container_width=True)
