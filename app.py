@@ -1145,9 +1145,19 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
         elif view_mode == "Top 5 + Bottom 5":
             df_long = df_long[df_long["지자체명"].isin(top5 + bot5)]
 
+    # 범례를 최신 주차 값 기준 내림차순으로 정렬 — 지자체가 많아도(예: 31개) 큰 값부터
+    # 순서대로 보이게 함 (그래야 겹치는 색·범례 사이에서 큰 값을 먼저 찾기 쉬움)
+    _latest_week_all = df_long[x_col].max()
+    _order_vals = (df_long[df_long[x_col] == _latest_week_all]
+                   .groupby("지자체명")["값"].sum().sort_values(ascending=False))
+    _mun_order = [_mun_label(m) for m in _order_vals.index]
+    _remaining = [_mun_label(m) for m in df_long["지자체명"].unique() if _mun_label(m) not in _mun_order]
+    _mun_order += _remaining
+
     df_plot = df_long.copy()
     df_plot["지자체명"] = df_plot["지자체명"].apply(_mun_label)
-    fig = px.line(df_plot, x=x_col, y="값", color="지자체명", markers=True)
+    fig = px.line(df_plot, x=x_col, y="값", color="지자체명", markers=True,
+                  category_orders={"지자체명": _mun_order})
 
     # 전체 평균 참조선 (점선)
     if show_avg and not df_long.empty:
