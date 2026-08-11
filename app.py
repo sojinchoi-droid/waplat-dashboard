@@ -2731,6 +2731,28 @@ elif page == "🖐 2.안부확인":
     _tb_gubn = tonghap_gubn_selector("safety") if selected_biz == "통합돌봄" else "전체"
     st.divider()
 
+    def _weekly_mun_checkin_rate(_biz, _gubn, _target_week):
+        """checkin_mun_weekly(일별 분모/분자)를 주차로 묶어 지자체별 안부확인율 계산.
+        기존엔 시트의 가장 최근 하루치 스냅샷만 보여줬는데, 주차 선택기와 무관하게
+        항상 최신 하루만 나와서 헷갈린다는 피드백을 받아 주차 합산으로 변경.
+        Returns: DataFrame [지자체명, 분모, 분자, 안부확인율, 시작일]"""
+        _cmw = data.get("checkin_mun_weekly", pd.DataFrame())
+        if _cmw.empty or not _target_week:
+            return pd.DataFrame()
+        _cmw = _cmw.copy()
+        _cmw["주차"] = _cmw["시작일"].apply(date_to_week_label)
+        _cmw = _cmw[_cmw["주차"] == _target_week]
+        _cmw = biz_filter_df_gubn(_cmw, _biz, _gubn, col="지자체명")
+        if _cmw.empty:
+            return pd.DataFrame()
+        _agg = _cmw.groupby("지자체명").agg({"분모": "sum", "분자": "sum"}).reset_index()
+        _agg["안부확인율"] = _agg.apply(
+            lambda r: round(r["분자"] / r["분모"] * 100, 1) if r["분모"] > 0 else 0.0, axis=1)
+        _agg["시작일"] = _target_week
+        return _agg[["지자체명", "분모", "분자", "안부확인율", "시작일"]]
+
+    _cr_target_week = selected_week if selected_week else (weeks[-1] if weeks else None)
+
     # DB에서 안부확인 raw 데이터 조회
     safety_db = data.get("dashboard_data", {}).get("db_safety_check", pd.DataFrame()) if isinstance(data.get("dashboard_data"), dict) else pd.DataFrame()
     if safety_db.empty:
@@ -2974,13 +2996,12 @@ elif page == "🖐 2.안부확인":
                 )
                 st.plotly_chart(fig_cr, use_container_width=True)
 
-            # 지자체별 안부확인율 — C:AK(분모)/AL:BT(분자) 직접 계산 바 차트
-            cr_direct = biz_filter_df_gubn(data.get("checkin_mun_rate_direct", pd.DataFrame()), selected_biz, _tb_gubn)
-            # 0%도 포함해서 전체 지자체(29개) 목록 표시 — registration 기준으로 빠진 지자체 추가
+            # 지자체별 안부확인율 — 일별 분모/분자(C:AK/AL:BT)를 주차로 묶어 합산한 주차 평균
+            cr_direct = _weekly_mun_checkin_rate(selected_biz, _tb_gubn, _cr_target_week)
+            # 0%도 포함해서 전체 지자체 목록 표시 — registration 기준으로 빠진 지자체 추가
             _all_muns_reg = biz_filter_df_gubn(data.get("registration", pd.DataFrame()), selected_biz, _tb_gubn)
-            if not cr_direct.empty and not _all_muns_reg.empty and "지자체명" in _all_muns_reg.columns:
-                _latest_d = cr_direct["시작일"].iloc[0] if "시작일" in cr_direct.columns else ""
-                _existing = set(cr_direct["지자체명"].tolist())
+            if not _all_muns_reg.empty and "지자체명" in _all_muns_reg.columns:
+                _existing = set(cr_direct["지자체명"].tolist()) if not cr_direct.empty else set()
                 _missing = [m for m in _all_muns_reg["지자체명"].tolist() if m not in _existing]
                 if _missing:
                     _zero_rows = pd.DataFrame({
@@ -2988,17 +3009,17 @@ elif page == "🖐 2.안부확인":
                         "안부확인율": 0.0,
                         "분자": 0,
                         "분모": 0,
-                        "시작일": _latest_d,
+                        "시작일": _cr_target_week,
                     })
                     cr_direct = pd.concat([cr_direct, _zero_rows], ignore_index=True)
             if not cr_direct.empty and "안부확인율" in cr_direct.columns:
-                latest_date = cr_direct["시작일"].iloc[0] if not cr_direct.empty else str(pd.Timestamp.now().date())
+                latest_date = _cr_target_week
                 latest_cr = cr_direct.copy()
                 latest_cr["권역"] = latest_cr["지자체명"].map(DETAIL_REGION).fillna("기타")
                 latest_cr = latest_cr.sort_values("안부확인율", ascending=True).copy()
                 latest_cr["지자체명_표시"] = latest_cr["지자체명"].apply(_mun_label)
 
-                st.markdown(f"**{latest_date} 기준**  |  분모: C~AK열, 분자: AL~BT열")
+                st.markdown(f"**{latest_date}주차 합산 기준** (일별 분모/분자를 주차로 합산)")
                 fig_mun = px.bar(
                     latest_cr, y="지자체명_표시", x="안부확인율", orientation="h",
                     color="권역", color_discrete_map=REGION_COLORS,
@@ -3006,7 +3027,7 @@ elif page == "🖐 2.안부확인":
                     height=min(800, max(480, len(latest_cr) * 26)),
                 )
                 fig_mun.update_layout(
-                    title=f"지자체별 안부확인율 ({latest_date})",
+                    title=f"지자체별 안부확인율 ({latest_date}주차)",
                     legend=LEGEND_BELOW, margin=dict(t=40, b=70),
                     xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
                     yaxis=dict(tickfont=dict(size=11)),
@@ -3408,15 +3429,15 @@ elif page == "🖐 2.안부확인":
         else:
             st.info("안부확인 데이터가 없습니다. ('안부확인전체' 시트 R열 안부미확인률 필요)")
 
-        # ② 지자체별 안부확인율 — C:AK/AL:BT 직접 계산 바 차트
-        cr_direct2 = data.get("checkin_mun_rate_direct", pd.DataFrame())
+        # ② 지자체별 안부확인율 — 일별 분모/분자를 주차로 묶어 합산한 주차 평균
+        cr_direct2 = _weekly_mun_checkin_rate(selected_biz, _tb_gubn, _cr_target_week)
         if not cr_direct2.empty and "안부확인율" in cr_direct2.columns:
-            latest_date2 = cr_direct2["시작일"].iloc[0]
+            latest_date2 = _cr_target_week
             latest_cr2 = cr_direct2.copy()
             latest_cr2["권역"] = latest_cr2["지자체명"].map(DETAIL_REGION).fillna("기타")
             latest_cr2 = latest_cr2.sort_values("안부확인율", ascending=True).copy()
             latest_cr2["지자체명_표시"] = latest_cr2["지자체명"].apply(_mun_label)
-            st.markdown(f"**{latest_date2} 기준**  |  분모: C~AK열, 분자: AL~BT열")
+            st.markdown(f"**{latest_date2}주차 합산 기준** (일별 분모/분자를 주차로 합산)")
             fig2 = px.bar(
                 latest_cr2, y="지자체명_표시", x="안부확인율", orientation="h",
                 color="권역", color_discrete_map=REGION_COLORS,
@@ -3424,7 +3445,7 @@ elif page == "🖐 2.안부확인":
                 height=min(520, max(320, len(latest_cr2) * 22)),
             )
             fig2.update_layout(
-                title=f"지자체별 안부확인율 ({latest_date2})",
+                title=f"지자체별 안부확인율 ({latest_date2}주차)",
                 legend=LEGEND_BELOW, margin=dict(t=40, b=70),
                 xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
                 yaxis=dict(tickfont=dict(size=11)),
