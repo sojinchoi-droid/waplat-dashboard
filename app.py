@@ -1178,10 +1178,11 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
     # 작으면 호버박스가 그 안에서 잘려서 일부 지자체만 보이는 문제가 있었음 —
     # 호버 글씨를 작게 줄이고, 트레이스 수에 비례해 차트 높이를 넉넉히 키워서
     # 호버박스가 잘리지 않게 함
-    _hover_font = 9 if _n_legend <= 14 else (8 if _n_legend <= 22 else 7)
+    _hover_font = 11 if _n_legend <= 14 else (10 if _n_legend <= 22 else 9)
     # 호버박스가 화면 아무 위치에서나(맨 아래쪽에서 hover해도) 안 잘리려면, 커서
     # 위치에 따라 위/아래로 확보 가능한 공간이 절반씩일 수 있다고 보고 넉넉히 2배로 확보
-    _hover_room = _n_legend * (_hover_font + 8) * 2
+    # (줄 사이 여백은 촘촘하게: 글씨 크기 + 3 정도로만 잡아서 글씨는 키우되 간격은 좁게)
+    _hover_room = _n_legend * (_hover_font + 3) * 2
     if _n_legend > 14:
         _legend_cfg = dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
                             font=dict(size=_hover_font), tracegroupgap=0)
