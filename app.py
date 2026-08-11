@@ -1169,14 +1169,41 @@ def plot_municipality_lines(df_long, title, height=350, metric_label="값", show
             hovertemplate="평균: %{y:,.1f}<extra></extra>"
         ))
 
-    fig.update_layout(
-        title=title, height=height,
-        margin=dict(t=40, b=60, l=40, r=60),
-        hovermode="x unified",
-        legend=LEGEND_BELOW,
-        xaxis=dict(type="category", title=""),
-        yaxis_title=metric_label,
-    )
+    # 지자체가 많으면(예: 23~31개) 가로 범례는 화면 폭에 따라 줄바꿈 개수가 달라져서
+    # 높이를 미리 정확히 예측할 수 없고, 좁은 화면에서는 아래쪽이 잘려 보이는 문제가
+    # 있었음 — 개수가 많을 땐 세로 범례(한 줄에 하나씩)로 바꿔서 화면 폭과 무관하게
+    # 항상 다 보이도록 함 (세로 한 줄당 높이가 고정이라 필요한 높이를 정확히 계산 가능)
+    _n_legend = len(_mun_order) + (1 if show_avg else 0)
+    # "x unified" 호버박스는 트레이스 수만큼 세로로 길어지는데, 차트 전체 높이가
+    # 작으면 호버박스가 그 안에서 잘려서 일부 지자체만 보이는 문제가 있었음 —
+    # 호버 글씨를 작게 줄이고, 트레이스 수에 비례해 차트 높이를 넉넉히 키워서
+    # 호버박스가 잘리지 않게 함
+    _hover_font = 9 if _n_legend <= 14 else (8 if _n_legend <= 22 else 7)
+    # 호버박스가 화면 아무 위치에서나(맨 아래쪽에서 hover해도) 안 잘리려면, 커서
+    # 위치에 따라 위/아래로 확보 가능한 공간이 절반씩일 수 있다고 보고 넉넉히 2배로 확보
+    _hover_room = _n_legend * (_hover_font + 8) * 2
+    if _n_legend > 14:
+        _legend_cfg = dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
+                            font=dict(size=_hover_font), tracegroupgap=0)
+        fig.update_layout(
+            title=title, height=max(height, _hover_room + 100),
+            margin=dict(t=40, b=40, l=40, r=160),
+            hovermode="x unified",
+            hoverlabel=dict(font=dict(size=_hover_font)),
+            legend=_legend_cfg,
+            xaxis=dict(type="category", title=""),
+            yaxis_title=metric_label,
+        )
+    else:
+        fig.update_layout(
+            title=title, height=max(height, _hover_room + 100),
+            margin=dict(t=40, b=60, l=40, r=60),
+            hovermode="x unified",
+            hoverlabel=dict(font=dict(size=_hover_font)),
+            legend=LEGEND_BELOW,
+            xaxis=dict(type="category", title=""),
+            yaxis_title=metric_label,
+        )
     fig.update_traces(hovertemplate="%{y:,.0f}<extra>%{fullData.name}</extra>")
     st.plotly_chart(fig, use_container_width=True)
 
