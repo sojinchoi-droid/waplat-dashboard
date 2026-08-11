@@ -3500,12 +3500,16 @@ elif page == "❤ 6.심혈관체크":
                         st.caption("※ 이용비중은 현재 시점 가입완료 인원 기준으로 계산했습니다. 과거 가입완료 인원이 "
                                    "지금과 달랐다면 과거 주차의 이용비중이 실제보다 높거나 100%를 넘어 보일 수 있습니다.")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
+            _cardio_expected = active_muni_list(selected_biz, _tb_gubn)
             mrt_cardio = biz_filter_df_gubn(extract_mun_ratio_trend(cardio_user_raw), selected_biz, _tb_gubn)
             if not mrt_cardio.empty:
                 mrt_cardio = filter_by_week_range(mrt_cardio, "주차", p_start, p_end, weeks)
+                # 계약 종료된 옛 지자체명(예: 청주시청, 괴산군청, 용인시청(구))이 시트에
+                # 컬럼으로 남아있어서 같이 나오는 걸 방지 — 현재 라이브 중인 지자체만 표시
+                mrt_cardio = mrt_cardio[mrt_cardio["지자체명"].isin(_cardio_expected)]
             # 값이 0인 지자체를 걸러내지 않고 expected_munis로 항상 전체 지자체가 나오게 함
             plot_municipality_lines(mrt_cardio, "지자체별 심혈관체크 이용자비중 추이 (%)", metric_label="이용자비중(%)",
-                                     expected_munis=active_muni_list(selected_biz, _tb_gubn))
+                                     expected_munis=_cardio_expected)
         else:
             st.info("심혈관 이용자 데이터가 없습니다.")
 
@@ -4647,12 +4651,16 @@ elif page == "😰 7.스트레스체크":
                         st.caption("※ 이용비중은 현재 시점 가입완료 인원 기준으로 계산했습니다. 과거 가입완료 인원이 "
                                    "지금과 달랐다면 과거 주차의 이용비중이 실제보다 높거나 100%를 넘어 보일 수 있습니다.")
             # ── 지자체별 이용자비중 추이 (구글 시트 AI~BK열 직접 사용) ──────────────────────────
+            _stress_expected = active_muni_list(selected_biz, _tb_gubn)
             mrt_stress = biz_filter_df_gubn(extract_mun_ratio_trend(stress_user_raw), selected_biz, _tb_gubn)
             if not mrt_stress.empty:
                 mrt_stress = filter_by_week_range(mrt_stress, "주차", p_start, p_end, weeks)
+                # 계약 종료된 옛 지자체명(예: 청주시청, 괴산군청, 용인시청(구))이 시트에
+                # 컬럼으로 남아있어서 같이 나오는 걸 방지 — 현재 라이브 중인 지자체만 표시
+                mrt_stress = mrt_stress[mrt_stress["지자체명"].isin(_stress_expected)]
             # 값이 0인 지자체를 걸러내지 않고 expected_munis로 항상 전체 지자체가 나오게 함
             plot_municipality_lines(mrt_stress, "지자체별 스트레스체크 이용자비중 추이 (%)", metric_label="이용자비중(%)",
-                                     expected_munis=active_muni_list(selected_biz, _tb_gubn))
+                                     expected_munis=_stress_expected)
         else:
             st.info("스트레스체크 이용자 데이터가 없습니다.")
 
