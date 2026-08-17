@@ -997,13 +997,14 @@ def extract_mun_ratio_trend(raw_df: pd.DataFrame) -> pd.DataFrame:
     return long[["주차", "지자체명", "값"]].reset_index(drop=True)
 
 
-def plot_municipality_bar(df, value_col, title, color_map=None, height=400):
+def plot_municipality_bar(df, value_col, title, color_map=None, height=400, color_col="권역"):
     """지자체별 바 차트 (내림차순 정렬)"""
     df_sorted = df.sort_values(value_col, ascending=True).copy()
     df_sorted["지자체명"] = df_sorted["지자체명"].apply(_mun_label)
+    default_color_map = {"수도권": "#2F5496", "비수도권": "#FF6F00", "기관": "#7B1FA2", "기타": "#9E9E9E"}
     fig = px.bar(df_sorted, y="지자체명", x=value_col, orientation="h",
-                 color="권역" if "권역" in df_sorted.columns else None,
-                 color_discrete_map={"수도권": "#2F5496", "비수도권": "#FF6F00", "기관": "#7B1FA2", "기타": "#9E9E9E"},
+                 color=color_col if color_col in df_sorted.columns else None,
+                 color_discrete_map=color_map if color_map is not None else default_color_map,
                  height=max(height, len(df_sorted) * 28))
     fig.update_layout(
         title=title, margin=dict(t=40, b=10, l=10, r=60),
@@ -2757,7 +2758,21 @@ elif page == "👥 1.회원가입 & 이탈":
                 week_del = week_del[week_del["지자체명"].isin(heatmap_muns)]
             week_del["권역"] = week_del["지자체명"].map(REGION_MAP).fillna("기타")
             if not week_del.empty:
-                plot_municipality_bar(week_del, "앱삭제율", f"{selected_week} 주차 지자체별 앱삭제율 (%)")
+                # 모수 = 가입완료 인원 (앱삭제율의 실제 분모 성격에 가장 가까운 값)
+                _reg_joined = data.get("registration", pd.DataFrame())
+                _joined_map = {}
+                if not _reg_joined.empty and "지자체명" in _reg_joined.columns and "가입완료" in _reg_joined.columns:
+                    _joined_map = dict(zip(_reg_joined["지자체명"], _reg_joined["가입완료"].apply(safe_numeric)))
+                week_del["모수"] = week_del["지자체명"].map(_joined_map).fillna(0)
+                week_del["모수구분"] = week_del["모수"].apply(
+                    lambda v: "모수 100명 이상" if v >= 100 else "모수 100명 미만"
+                )
+                st.caption("색상: 모수(가입완료 인원) 100명 기준 구분")
+                plot_municipality_bar(
+                    week_del, "앱삭제율", f"{selected_week} 주차 지자체별 앱삭제율 (%)",
+                    color_col="모수구분",
+                    color_map={"모수 100명 이상": "#2F5496", "모수 100명 미만": "#EF5350"},
+                )
 
 
 # ============================================================
