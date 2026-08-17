@@ -24,7 +24,7 @@ pio.templates["waplat"] = go.layout.Template(
 pio.templates.default = "waplat"
 
 from sheets_data import (
-    fetch_all_sheets, fetch_sheet, SHEET_GIDS,
+    fetch_all_sheets, fetch_sheet, SHEET_GIDS, SPREADSHEET_ID,
     build_dashboard_data, build_municipality_heatmap_data,
     get_week_summary, get_weekly_municipality_data,
     safe_numeric, find_municipality_columns, extract_municipality_name,
@@ -46,7 +46,7 @@ from local_db import (
 )
 from sheets_data import (
     get_sheet_note, save_sheet_note,
-    get_safe_status_from_sheet, save_safe_status_to_sheet,
+    get_safe_status_direct,
 )
 
 # ============================================================
@@ -1672,16 +1672,9 @@ if page == "📋 Summary":
 
             st.markdown("")
 
-            # 세이프 대상 지자체 현황 — Google Sheet 우선, SQLite fallback
-            safe_status = get_safe_status_from_sheet()
-            if safe_status.empty:
-                try:
-                    from local_db import get_connection as _gc
-                    _conn = _gc()
-                    safe_status = pd.read_sql_query("SELECT * FROM safe_agency_status ORDER BY monitoring_start_date", _conn)
-                    _conn.close()
-                except Exception:
-                    safe_status = pd.DataFrame()
+            # 세이프 대상 지자체 현황 — '세이프대상' 시트에서 직접 읽음 (공개 CSV, 인증 불필요)
+            # 담당자가 시트를 직접 수정하면 되므로 앱 재시작에 데이터가 사라지는 문제가 없음
+            safe_status = get_safe_status_direct(sheets)
 
             st.markdown('<div class="section-header">🛡 세이프 대상 지자체 현황</div>', unsafe_allow_html=True)
 
@@ -1733,229 +1726,13 @@ if page == "📋 Summary":
                         save_note("pending_agencies", _new_note)
                         st.warning("시트 저장 실패 — 로컬에만 저장됨")
 
-            # 파일 업로드 + 로컬 경로 + 수동 편집
-            _safe_expander_open = st.session_state.get("safe_expander_open", False)
-            with st.expander("📤 세이프 현황 업데이트 (엑셀 업로드 또는 수동 편집)", expanded=_safe_expander_open):
-                upload_tab, path_tab, manual_tab = st.tabs(["📁 엑셀 파일 업로드", "📂 로컬 파일 경로 (VPN 우회)", "✏️ 수동 편집"])
-
-                with path_tab:
-                    st.caption("VPN으로 파일 업로드가 막힐 때 사용하세요. 서버가 파일을 직접 읽습니다.")
-                    _local_path = st.text_input(
-                        "엑셀 파일 경로 입력",
-                        placeholder=r"예) C:\Users\NHN\Downloads\계산용.xlsx",
-                        key="safe_local_path"
-                    )
-                    if st.button("📂 경로로 파일 읽기", key="safe_local_load"):
-                        import os
-                        if _local_path and os.path.exists(_local_path):
-                            with open(_local_path, "rb") as _f:
-                                st.session_state["safe_upload_bytes"] = _f.read()
-                                st.session_state["safe_upload_name"] = os.path.basename(_local_path)
-                                st.session_state["safe_expander_open"] = True
-                            st.success(f"✅ 파일 읽기 성공: {os.path.basename(_local_path)}")
-                            st.rerun()
-                        elif _local_path:
-                            st.error(f"❌ 파일을 찾을 수 없습니다: {_local_path}")
-                        else:
-                            st.warning("파일 경로를 입력해주세요.")
-
-                with upload_tab:
-                    st.caption("계산용.xlsx 같은 엑셀 파일을 업로드하면 자동으로 반영됩니다.")
-                    st.caption("필수 컬럼: 관제 등록 날짜, 구분, 지자체명, 계약 인원, 전체 등록 이용자, 전체 가입한 이용자")
-                    uploaded_file = st.file_uploader("엑셀 파일 업로드 (.xlsx)", type=["xlsx"], key="safe_upload")
-
-                    # 파일이 업로드되면 bytes를 session_state에 보관 (버튼 클릭 후 rerun돼도 유지)
-                    if uploaded_file is not None:
-                        st.session_state["safe_upload_bytes"] = uploaded_file.read()
-                        st.session_state["safe_upload_name"] = uploaded_file.name
-                        st.session_state["safe_expander_open"] = True
-
-                    _upload_bytes = st.session_state.get("safe_upload_bytes")
-                    if _upload_bytes is not None:
-                        try:
-                            import openpyxl, io
-                            wb = openpyxl.load_workbook(io.BytesIO(_upload_bytes), data_only=True)
-                            # Sheet2 (정리된 데이터) 우선, 없으면 Sheet1
-                            ws = wb["Sheet2"] if "Sheet2" in wb.sheetnames else wb[wb.sheetnames[0]]
-
-                            # 헤더 찾기 (첫 번째 비어있지 않은 행)
-                            header_row = None
-                            for row in ws.iter_rows(min_row=1, max_row=5, values_only=False):
-                                vals = [cell.value for cell in row]
-                                if any(v is not None and str(v).strip() for v in vals):
-                                    header_row = row
-                                    break
-
-                            if header_row:
-                                headers = [str(cell.value).strip() if cell.value else f"col_{i}" for i, cell in enumerate(header_row)]
-                                start_row = header_row[0].row + 1
-
-                                rows_data = []
-                                for row in ws.iter_rows(min_row=start_row, max_row=ws.max_row, values_only=True):
-                                    vals = list(row)
-                                    if len(vals) >= len(headers):
-                                        vals = vals[:len(headers)]
-                                    else:
-                                        vals.extend([None] * (len(headers) - len(vals)))
-                                    row_dict = dict(zip(headers, vals))
-                                    # 지자체명이 있는 행만
-                                    agency = None
-                                    for k, v in row_dict.items():
-                                        if v and str(v).strip() and any(kw in str(k) for kw in ["지자체", "기관"]):
-                                            agency = str(v).strip()
-                                            break
-                                    if agency and agency != "합계" and agency != "총합":
-                                        rows_data.append(row_dict)
-
-                                if rows_data:
-                                    preview_df = pd.DataFrame(rows_data)
-                                    st.success(f"✅ {len(rows_data)}개 지자체 데이터 감지!")
-                                    st.dataframe(preview_df, use_container_width=True, hide_index=True)
-
-                                    if st.button("💾 이 데이터로 세이프 현황 업데이트", key="upload_safe_save"):
-                                        try:
-                                            # 컬럼명 유연 매칭 → 정규화된 행 목록 생성
-                                            normalized_rows = []
-                                            for rd in rows_data:
-                                                agency_name = ""
-                                                start_date = ""
-                                                memo = ""
-                                                contract = 0
-                                                registered = 0
-                                                joined = 0
-
-                                                for k, v in rd.items():
-                                                    kl = str(k).replace(" ", "")
-                                                    if "지자체" in kl or "기관" in kl:
-                                                        agency_name = str(v).strip() if v else ""
-                                                    elif "날짜" in kl or "시작" in kl or "등록날짜" in kl:
-                                                        start_date = str(v).strip() if v else ""
-                                                    elif "구분" in kl or "비고" in kl:
-                                                        memo = str(v).strip() if v else ""
-                                                    elif "계약" in kl and "인원" in kl:
-                                                        contract = int(float(v)) if v else 0
-                                                    elif "등록" in kl and "이용" in kl:
-                                                        registered = int(float(v)) if v else 0
-                                                    elif "가입" in kl and "이용" in kl:
-                                                        joined = int(float(v)) if v else 0
-
-                                                if not agency_name:
-                                                    continue
-
-                                                r_rate = round(registered / contract * 100, 1) if contract > 0 else 0
-                                                j_rate = round(joined / contract * 100, 1) if contract > 0 else 0
-                                                normalized_rows.append({
-                                                    "monitoring_start_date": start_date,
-                                                    "memo": memo,
-                                                    "agency_name": agency_name,
-                                                    "contract_users": contract,
-                                                    "registered_users": registered,
-                                                    "joined_users": joined,
-                                                    "registered_rate": r_rate,
-                                                    "joined_rate": j_rate,
-                                                })
-
-                                            # 1) Google Sheets에 저장 (영구)
-                                            _sheet_saved = save_safe_status_to_sheet(normalized_rows)
-
-                                            # 2) SQLite에도 저장 (세션 내 즉시 반영용)
-                                            from local_db import get_connection as _gc2
-                                            _conn2 = _gc2()
-                                            _conn2.execute("DELETE FROM safe_agency_status")
-                                            for nr in normalized_rows:
-                                                _conn2.execute("""
-                                                    INSERT INTO safe_agency_status
-                                                    (monitoring_start_date, memo, agency_name, contract_users, registered_users, joined_users, registered_rate, joined_rate)
-                                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                                """, (
-                                                    nr["monitoring_start_date"], nr["memo"], nr["agency_name"],
-                                                    nr["contract_users"], nr["registered_users"], nr["joined_users"],
-                                                    nr["registered_rate"], nr["joined_rate"],
-                                                ))
-                                            _conn2.commit()
-                                            _conn2.close()
-
-                                            if _sheet_saved:
-                                                st.success("✅ 세이프 현황이 업데이트되었습니다! (시트에 영구 저장됨)")
-                                            else:
-                                                st.success("✅ 세이프 현황이 업데이트되었습니다!")
-                                                st.warning("⚠️ 시트 저장 실패 — 재시작 시 초기화될 수 있습니다. 서비스 계정을 설정해주세요.")
-
-                                            st.session_state.pop("safe_upload_bytes", None)
-                                            st.session_state.pop("safe_upload_name", None)
-                                            st.session_state["safe_expander_open"] = True
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"저장 실패: {e}")
-                                else:
-                                    st.warning("지자체 데이터를 찾을 수 없습니다. 컬럼명을 확인해주세요.")
-                        except Exception as e:
-                            st.error(f"파일 읽기 실패: {e}")
-
-                with manual_tab:
-                    if not safe_status.empty:
-                        safe_edit = safe_status[["monitoring_start_date", "memo", "agency_name", "contract_users",
-                                                  "registered_users", "joined_users"]].copy()
-                        safe_edit.columns = ["관제시작일", "비고", "지자체명", "계약인원", "등록이용자", "가입이용자"]
-                    else:
-                        safe_edit = pd.DataFrame(columns=["관제시작일", "비고", "지자체명", "계약인원", "등록이용자", "가입이용자"])
-
-                    edited_safe = st.data_editor(
-                        safe_edit,
-                        use_container_width=True,
-                        num_rows="dynamic",
-                        key="safe_editor",
-                    )
-
-                    if st.button("💾 세이프 현황 저장", key="save_safe_status"):
-                        try:
-                            normalized_rows_manual = []
-                            for _, r in edited_safe.iterrows():
-                                agency = str(r.get("지자체명", "")).strip()
-                                if not agency:
-                                    continue
-                                target = int(r.get("계약인원", 0))
-                                mon = int(r.get("등록이용자", 0))
-                                call = int(r.get("가입이용자", 0))
-                                m_rate = round(mon / target * 100, 1) if target > 0 else 0
-                                c_rate = round(call / target * 100, 1) if target > 0 else 0
-                                normalized_rows_manual.append({
-                                    "monitoring_start_date": str(r.get("관제시작일", "")),
-                                    "memo": str(r.get("비고", "")),
-                                    "agency_name": agency,
-                                    "contract_users": target,
-                                    "registered_users": mon,
-                                    "joined_users": call,
-                                    "registered_rate": m_rate,
-                                    "joined_rate": c_rate,
-                                })
-
-                            _sheet_saved_m = save_safe_status_to_sheet(normalized_rows_manual)
-
-                            from local_db import get_connection as _gc2
-                            _conn2 = _gc2()
-                            _conn2.execute("DELETE FROM safe_agency_status")
-                            for nr in normalized_rows_manual:
-                                _conn2.execute("""
-                                    INSERT INTO safe_agency_status
-                                    (monitoring_start_date, memo, agency_name, contract_users, registered_users, joined_users, registered_rate, joined_rate)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                """, (nr["monitoring_start_date"], nr["memo"], nr["agency_name"],
-                                      nr["contract_users"], nr["registered_users"], nr["joined_users"],
-                                      nr["registered_rate"], nr["joined_rate"]))
-                            _conn2.commit()
-                            _conn2.close()
-
-                            if _sheet_saved_m:
-                                st.success("✅ 세이프 현황이 저장되었습니다! (시트에 영구 저장됨)")
-                            else:
-                                st.success("세이프 현황이 저장되었습니다!")
-                                st.warning("⚠️ 시트 저장 실패 — 재시작 시 초기화될 수 있습니다. 서비스 계정을 설정해주세요.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"저장 실패: {e}")
-
-            st.markdown("")
+            # 데이터 입력은 '세이프대상' 구글시트에서 직접 — 담당자가 시트를 고치면
+            # 앱은 새로고침 시 항상 그 값을 그대로 보여줌 (재시작해도 안 풀림)
+            st.caption(
+                "📝 이 표는 [세이프대상 시트]"
+                f"(https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit?gid={SHEET_GIDS['세이프대상']}) "
+                "에서 직접 읽어옵니다. 데이터 수정은 시트에서 해주세요 — 저장 즉시(새로고침 시) 반영됩니다."
+            )
 
         # 히트맵
         heatmap_df = cached_heatmap(data, selected_week)

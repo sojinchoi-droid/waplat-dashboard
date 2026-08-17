@@ -44,6 +44,7 @@ SHEET_GIDS = {
     "건강상담지자체":   "867975933",
     "걸음수현황":       "1968687679",
     "걸음수이용":       "680392566",
+    "세이프대상":       "658144692",
 }
 
 # 지자체 키워드 (컬럼명에서 지자체 자동 탐지용)
@@ -1862,6 +1863,58 @@ _SAFE_STATUS_COLS = [
     "contract_users", "registered_users", "joined_users",
     "registered_rate", "joined_rate",
 ]
+
+
+def get_safe_status_direct(sheets: dict = None) -> "pd.DataFrame":
+    """'세이프대상' 시트(공개 CSV, 인증 불필요)에서 세이프 대상 지자체 현황을 직접 읽는다.
+
+    서비스 계정 인증이 없어도 항상 시트 원본을 그대로 보여줄 수 있도록,
+    수동 편집/업로드 후 앱 내부(SQLite)에만 저장하던 방식 대신 이 시트를
+    유일한 소스로 사용한다 — 담당자가 이 시트를 직접 수정하면 앱 재시작
+    여부와 무관하게 항상 최신 값이 반영됨(더 이상 "데이터가 풀리는" 문제 없음).
+    """
+    df = sheets.get("세이프대상") if sheets else None
+    if df is None:
+        df = fetch_sheet(SHEET_GIDS["세이프대상"])
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    def _find_col(*keywords):
+        for c in df.columns:
+            cl = str(c).replace(" ", "").replace("\n", "")
+            if all(kw in cl for kw in keywords):
+                return c
+        return None
+
+    col_agency = _find_col("지자체명")
+    col_date = _find_col("등록", "날짜")
+    col_memo = _find_col("서비스구분")
+    col_contract = _find_col("계약", "인원")
+    col_registered = _find_col("등록", "이용자")
+    col_joined = _find_col("가입", "이용자")
+
+    if col_agency is None:
+        return pd.DataFrame()
+
+    rows = []
+    for _, row in df.iterrows():
+        agency = str(row.get(col_agency, "")).strip()
+        if not agency or agency in ("nan", "NaN"):
+            continue
+        contract = safe_numeric(row.get(col_contract)) if col_contract else 0
+        registered = safe_numeric(row.get(col_registered)) if col_registered else 0
+        joined = safe_numeric(row.get(col_joined)) if col_joined else 0
+        rows.append({
+            "monitoring_start_date": str(row.get(col_date, "")).strip() if col_date else "",
+            "memo": str(row.get(col_memo, "")).strip() if col_memo else "",
+            "agency_name": agency,
+            "contract_users": int(contract),
+            "registered_users": int(registered),
+            "joined_users": int(joined),
+            "registered_rate": round(registered / contract * 100, 1) if contract > 0 else 0.0,
+            "joined_rate": round(joined / contract * 100, 1) if contract > 0 else 0.0,
+        })
+    return pd.DataFrame(rows)
 
 
 def get_safe_status_from_sheet() -> "pd.DataFrame":
