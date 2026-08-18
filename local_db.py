@@ -624,47 +624,44 @@ BASIC_AGENCIES = [
     "경기도청", "서초구청", "진천군청", "포천시청",
     "경남사회서비스원", "홍천군청", "정선군청", "영월군청",
 ]
-TOTAL_ACTIVE = 28   # 전체 계약 지자체 수 (세이프 + 베이직)
 
 def get_agency_summary(sheets=None) -> dict:
-    """지자체 현황 요약
-    - 베이직 = BASIC_AGENCIES (7개 고정)
-    - 세이프 = safe_agency_status 테이블 행 수 (업로드 파일 기준)
-    - 활성 지자체 = 세이프 + 베이직
+    """지자체 현황 요약 — 등록(이용자현황) 시트 기준으로 매번 실시간 계산.
+    - 활성 지자체 = 협약인원 > 0 인 지자체 수
+    - 베이직 = 활성 지자체 중 BASIC_AGENCIES(고정 목록)에 속한 수
+    - 세이프 = 활성 지자체 - 베이직
+    (예전엔 베이직만 고정값, 세이프는 별도 SQLite 테이블 행 수를 썼는데,
+    그 테이블에 더 이상 아무도 쓰지 않게 되면서 지자체가 늘어도 숫자가
+    안 늘어나는 문제가 있었음 — 등록 시트 기준으로 계산하면 항상 최신값)
     """
-    import pandas as pd
+    from sheets_data import safe_numeric
     summary = {}
 
     total_target = 0
     total_completed = 0
+    active_count = 0
+    basic_count = 0
+    safe_count = 0
 
-    basic_count = len(BASIC_AGENCIES)   # 7 (고정)
-
-    # 세이프: safe_agency_status 테이블에서 실제 행 수 가져오기
-    try:
-        conn = get_connection()
-        row = conn.execute("SELECT COUNT(*) FROM safe_agency_status").fetchone()
-        conn.close()
-        safe_count = int(row[0]) if row and row[0] else TOTAL_ACTIVE - basic_count
-    except Exception:
-        safe_count = TOTAL_ACTIVE - basic_count  # fallback: 15
-
-    active_count = safe_count + basic_count  # 세이프 + 베이직 = 활성 지자체
-
-    # 가입 통계는 이용자현황 시트에서 계속 읽어옴
     try:
         if sheets and "이용자현황" in sheets and not sheets["이용자현황"].empty:
             reg = sheets["이용자현황"]
         else:
-            from sheets_data import fetch_sheet, SHEET_GIDS, get_registration_status
-            reg_sheets = {"이용자현황": fetch_sheet(SHEET_GIDS["이용자현황"])}
-            reg = get_registration_status(reg_sheets)
+            from sheets_data import fetch_sheet, SHEET_GIDS
+            reg = {"이용자현황": fetch_sheet(SHEET_GIDS["이용자현황"])}["이용자현황"]
+        from sheets_data import get_registration_status
+        reg = get_registration_status({"이용자현황": reg})
         if not reg.empty:
-            from sheets_data import safe_numeric
             if "협약인원" in reg.columns:
                 total_target = int(reg["협약인원"].apply(safe_numeric).sum())
             if "가입완료" in reg.columns:
                 total_completed = int(reg["가입완료"].apply(safe_numeric).sum())
+            if "협약인원" in reg.columns and "지자체명" in reg.columns:
+                active_reg = reg[reg["협약인원"].apply(safe_numeric) > 0]
+                active_count = len(active_reg)
+                active_names = set(active_reg["지자체명"].astype(str).str.strip())
+                basic_count = len(active_names & set(BASIC_AGENCIES))
+                safe_count = active_count - basic_count
     except Exception:
         pass
 
