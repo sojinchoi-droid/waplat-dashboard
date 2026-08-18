@@ -1130,11 +1130,14 @@ def _resolve_checkin_mun_denom_numer(header: list) -> tuple:
 def get_checkin_mun_rate_direct() -> pd.DataFrame:
     """안부확인지자체 시트에서 지자체별 최신 안부확인율을 헤더 이름 매칭으로 계산
 
-    gviz range=A:CZ로 넉넉히 fetch 후 _resolve_checkin_mun_denom_numer()로 이름 매칭
+    gviz range=A:ZZ로 넉넉히 fetch 후 _resolve_checkin_mun_denom_numer()로 이름 매칭
+    (이 시트는 분모/분자 외에도 안부미확인자·안부체크응답·안부체크율1 등 여러 블록이
+    나란히 있어 실제 컬럼 수가 400개를 넘음 — A:CZ(104컬럼)로는 지자체가 늘수록
+    분모/분자 블록 자체가 범위 밖으로 밀려날 수 있어 여유 있게 A:ZZ로 확장)
     Returns: DataFrame [지자체명, 분모, 분자, 안부확인율, 시작일]
     """
     GID = SHEET_GIDS["안부확인지자체"]
-    url = BASE_URL + GID + "&range=A:CZ"
+    url = BASE_URL + GID + "&range=A:ZZ"
     try:
         resp = requests.get(url, timeout=30)
         resp.raise_for_status()
@@ -1186,11 +1189,12 @@ def get_checkin_mun_weekly() -> pd.DataFrame:
     """안부확인지자체 시트에서 지자체별 안부확인율 시계열을 헤더 이름 매칭으로 계산
     (long-format, 모든 주차)
 
-    gviz range=A:CZ로 넉넉히 fetch 후 _resolve_checkin_mun_denom_numer()로 이름 매칭
+    gviz range=A:ZZ로 넉넉히 fetch 후 _resolve_checkin_mun_denom_numer()로 이름 매칭
+    (사유는 get_checkin_mun_rate_direct() 주석 참고 — 같은 시트, 같은 범위 확장)
     Returns: DataFrame [시작일, 지자체명, 분모, 분자, 안부확인율]
     """
     GID = SHEET_GIDS["안부확인지자체"]
-    url = BASE_URL + GID + "&range=A:CZ"
+    url = BASE_URL + GID + "&range=A:ZZ"
     try:
         resp = requests.get(url, timeout=30)
         resp.raise_for_status()

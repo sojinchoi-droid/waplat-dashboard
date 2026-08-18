@@ -607,7 +607,7 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.caption("v2026-07-20")
+    st.caption("v2026-08-18")
 
     # 페이지 선택
     page = st.radio(
