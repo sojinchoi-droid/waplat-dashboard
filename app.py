@@ -4100,11 +4100,13 @@ elif page == "🛡 5.안부체크 변경(세이프)":
                 if not _d or _d == "nan":
                     continue
                 for _cc in _ktt_ctrl_cols:
-                    _mun = str(_cc).replace("\n","").strip().replace("KTT_관제_","").strip()
+                    _mun = extract_municipality_name(
+                        str(_cc).replace("\n", "").strip().replace("KTT_관제_", "").strip())
                     if _mun not in _EXCL_MUNS:
                         _ctrl_rows.append({"날짜": _d, "지자체명": _mun, "관제수": safe_numeric(_row.get(_cc, 0))})
                 for _dc in _ktt_disp_cols:
-                    _mun = str(_dc).replace("\n","").strip().replace("KTT_출동_","").strip()
+                    _mun = extract_municipality_name(
+                        str(_dc).replace("\n", "").strip().replace("KTT_출동_", "").strip())
                     if _mun not in _EXCL_MUNS:
                         _disp_rows.append({"날짜": _d, "지자체명": _mun, "출동수": safe_numeric(_row.get(_dc, 0))})
             if _ctrl_rows:
