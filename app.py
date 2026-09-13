@@ -2856,13 +2856,15 @@ elif page == "🖐 2.안부확인":
                     latest_cr, y="지자체명_표시", x="안부확인율", orientation="h",
                     color="권역", color_discrete_map=REGION_COLORS,
                     custom_data=["분자", "분모"],
-                    height=min(800, max(480, len(latest_cr) * 26)),
+                    height=max(480, len(latest_cr) * 26),
                 )
                 fig_mun.update_layout(
                     title=f"지자체별 안부확인율 ({latest_date}주차)",
                     legend=LEGEND_BELOW, margin=dict(t=40, b=70),
                     xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
-                    yaxis=dict(tickfont=dict(size=11)),
+                    # tickmode="linear" + dtick=1로 강제해서 지자체 수가 많아도
+                    # Plotly가 라벨을 자동으로 솎아내(격줄 표시) 절반만 보이는 문제 방지
+                    yaxis=dict(tickfont=dict(size=11), tickmode="linear", dtick=1),
                 )
                 fig_mun.update_traces(
                     texttemplate="%{x:.1f}%", textposition="outside",
@@ -3263,6 +3265,22 @@ elif page == "🖐 2.안부확인":
 
         # ② 지자체별 안부확인율 — 일별 분모/분자를 주차로 묶어 합산한 주차 평균
         cr_direct2 = _weekly_mun_checkin_rate(selected_biz, _tb_gubn, _cr_target_week)
+        # 0%도 포함해서 전체 지자체 목록 표시 — registration 기준으로 빠진 지자체 추가
+        # (safety_db가 비어있어 이 분기로 오는 경우에도 위 ①번 차트와 동일하게 패딩 필요 —
+        # 안 그러면 그 주 실데이터가 없는 지자체는 차트에서 통째로 빠짐)
+        _all_muns_reg2 = biz_filter_df_gubn(data.get("registration", pd.DataFrame()), selected_biz, _tb_gubn)
+        if not _all_muns_reg2.empty and "지자체명" in _all_muns_reg2.columns:
+            _existing2 = set(cr_direct2["지자체명"].tolist()) if not cr_direct2.empty else set()
+            _missing2 = [m for m in _all_muns_reg2["지자체명"].tolist() if m not in _existing2]
+            if _missing2:
+                _zero_rows2 = pd.DataFrame({
+                    "지자체명": _missing2,
+                    "안부확인율": 0.0,
+                    "분자": 0,
+                    "분모": 0,
+                    "시작일": _cr_target_week,
+                })
+                cr_direct2 = pd.concat([cr_direct2, _zero_rows2], ignore_index=True)
         if not cr_direct2.empty and "안부확인율" in cr_direct2.columns:
             latest_date2 = _cr_target_week
             latest_cr2 = cr_direct2.copy()
@@ -3274,13 +3292,15 @@ elif page == "🖐 2.안부확인":
                 latest_cr2, y="지자체명_표시", x="안부확인율", orientation="h",
                 color="권역", color_discrete_map=REGION_COLORS,
                 custom_data=["분자", "분모"],
-                height=min(520, max(320, len(latest_cr2) * 22)),
+                height=max(480, len(latest_cr2) * 26),
             )
             fig2.update_layout(
                 title=f"지자체별 안부확인율 ({latest_date2}주차)",
                 legend=LEGEND_BELOW, margin=dict(t=40, b=70),
                 xaxis=dict(range=[0, 105], title="안부확인율 (%)"),
-                yaxis=dict(tickfont=dict(size=11)),
+                # tickmode="linear" + dtick=1로 강제해서 지자체 수가 많아도
+                # Plotly가 라벨을 자동으로 솎아내(격줄 표시) 절반만 보이는 문제 방지
+                yaxis=dict(tickfont=dict(size=11), tickmode="linear", dtick=1),
             )
             fig2.update_traces(
                 texttemplate="%{x:.1f}%", textposition="outside",
