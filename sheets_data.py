@@ -433,6 +433,11 @@ def safe_numeric(val):
 # 데이터 가공 함수들
 # ============================================================
 
+# 계약 종료된 지자체 {지자체명: 마지막 서비스일} — 시트에 행이 남아있어도 현황/집계에서 제외.
+# 과거 데이터(종료일 이전)는 유지하고, 종료일 이후 주차에는 나오지 않게 함.
+ENDED_AGENCIES = {"강원사회서비스원": "2026-09-30"}
+
+
 def get_registration_status(sheets: dict) -> pd.DataFrame:
     """시트1: 이용자 현황(전체지자체) - 지자체별 회원가입 완료율"""
     df = sheets.get("이용자현황", pd.DataFrame())
@@ -477,6 +482,7 @@ def get_registration_status(sheets: dict) -> pd.DataFrame:
             pad_rows.append(row)
     if pad_rows:
         df = pd.concat([df, pd.DataFrame(pad_rows)], ignore_index=True)
+    df = df[~df["지자체명"].isin(ENDED_AGENCIES)].reset_index(drop=True)
     return df
 
 
@@ -1230,6 +1236,8 @@ def get_checkin_mun_weekly() -> pd.DataFrame:
                 continue
             denom = safe_numeric(vals[d_i])
             numer = safe_numeric(vals[n_i])
+            if mun_name in ENDED_AGENCIES and date_val > ENDED_AGENCIES[mun_name]:
+                continue
             if denom > 0:
                 rows.append({
                     "시작일": date_val, "지자체명": mun_name,
@@ -1906,6 +1914,8 @@ def get_safe_status_direct(sheets: dict = None) -> "pd.DataFrame":
     for _, row in df.iterrows():
         agency = str(row.get(col_agency, "")).strip()
         if not agency or agency in ("nan", "NaN"):
+            continue
+        if normalize_agency_name(agency) in ENDED_AGENCIES:
             continue
         contract = safe_numeric(row.get(col_contract)) if col_contract else 0
         registered = safe_numeric(row.get(col_registered)) if col_registered else 0

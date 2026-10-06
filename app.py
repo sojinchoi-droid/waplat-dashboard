@@ -4113,20 +4113,26 @@ elif page == "🛡 5.안부체크 변경(세이프)":
         _ktt_ctrl_cols = [_c for _c in _df_safe.columns if str(_c).replace("\n","").strip().startswith("KTT_관제_")]
         _ktt_disp_cols = [_c for _c in _df_safe.columns if str(_c).replace("\n","").strip().startswith("KTT_출동_")]
         _EXCL_MUNS = {"마포구청", "광진구청"}
+        from sheets_data import ENDED_AGENCIES as _ENDED
         if _ktt_ctrl_cols:
             _ctrl_rows, _disp_rows = [], []
-            for _, _row in _df_safe.iterrows():
+            for _ridx, _row in _df_safe.iterrows():
                 _d = str(_row.get(_sf_date_col, "")).strip()
                 if not _d or _d == "nan":
                     continue
+                _raw_d = str(_sf.loc[_ridx, _sf_date_col]).strip()
                 for _cc in _ktt_ctrl_cols:
                     _mun = extract_municipality_name(
                         str(_cc).replace("\n", "").strip().replace("KTT_관제_", "").strip())
+                    if _mun in _ENDED and _raw_d > _ENDED[_mun]:
+                        continue
                     if _mun not in _EXCL_MUNS:
                         _ctrl_rows.append({"날짜": _d, "지자체명": _mun, "관제수": safe_numeric(_row.get(_cc, 0))})
                 for _dc in _ktt_disp_cols:
                     _mun = extract_municipality_name(
                         str(_dc).replace("\n", "").strip().replace("KTT_출동_", "").strip())
+                    if _mun in _ENDED and _raw_d > _ENDED[_mun]:
+                        continue
                     if _mun not in _EXCL_MUNS:
                         _disp_rows.append({"날짜": _d, "지자체명": _mun, "출동수": safe_numeric(_row.get(_dc, 0))})
             if _ctrl_rows:
